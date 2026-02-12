@@ -1,0 +1,67 @@
+# ACME DNS-01 Challenge Configuration Example
+# This file demonstrates how to configure automatic TLS certificate management
+# using DNS-01 challenges with Let's Encrypt or other ACME-compatible CAs.
+
+acme:
+  # ACME server URL
+  # Production: https://acme-v02.api.letsencrypt.org/directory
+  # Staging (for testing): https://acme-staging-v02.api.letsencrypt.org/directory
+  server: "https://acme-staging-v02.api.letsencrypt.org/directory"
+
+  # Email address for ACME account registration
+  # Used for important notifications (e.g., certificate expiration warnings)
+  email: "admin@example.com"
+
+  # Certificate key type
+  # Options: RSA2048, RSA4096, EC256, EC384
+  # EC256 is recommended for better performance and smaller certificates
+  key_type: "RSA2048"
+
+  # DNS propagation wait time
+  # How long to wait after creating DNS TXT record before ACME validation
+  # Increase if your DNS provider has slow propagation
+  propagation_wait: "60s"
+
+  # Automatic renewal configuration
+  auto_renew:
+    # Enable automatic certificate renewal
+    enabled: true
+
+    # How often to check for certificates needing renewal
+    check_interval: "24h"
+
+    # Renew certificates this long before expiration
+    # 720h = 30 days (recommended)
+    renew_before: "720h"
+
+  # Certificate storage configuration
+  storage:
+    # Storage backend type
+    # Options: kubernetes-secret, file
+    type: "kubernetes-secret"
+
+    # Kubernetes namespace (if type is kubernetes-secret)
+    namespace: "default"
+
+    # File system path (if type is file)
+    # path: "/var/lib/jw238dns/certs"
+
+# Example domains to obtain certificates for
+domains:
+  # Single domain certificate
+  - domains:
+      - "example.com"
+    auto_obtain: true
+
+  # Wildcard certificate (requires DNS-01 challenge)
+  - domains:
+      - "*.example.com"
+      - "example.com"
+    auto_obtain: true
+
+  # Multi-domain (SAN) certificate
+  - domains:
+      - "www.example.com"
+      - "api.example.com"
+      - "mail.example.com"
+    auto_obtain: false  # Manual trigger required
