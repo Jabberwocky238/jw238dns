@@ -74,7 +74,7 @@ data:
 
     acme:
       enabled: false
-      server: "https://acme-staging-v02.api.letsencrypt.org/directory"
+      server: "https://acme.zerossl.com/v2/DV90"
       email: "admin@example.com"
       auto_renew: true
       storage:
@@ -175,10 +175,41 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+      initContainers:
+        - name: download-geoip
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Downloading GeoLite2-City.mmdb..."
+              curl -L -o /tmp/GeoLite2-City.tar.gz "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
+              if [ $? -eq 0 ]; then
+                echo "Download completed successfully"
+                # If it's a tar.gz, extract it; otherwise just copy
+                if file /tmp/GeoLite2-City.tar.gz | grep -q "gzip"; then
+                  tar -xzf /tmp/GeoLite2-City.tar.gz -C /tmp --strip-components=1 "*/GeoLite2-City.mmdb" 2>/dev/null || tar -xzf /tmp/GeoLite2-City.tar.gz -C /tmp
+                  find /tmp -name "GeoLite2-City.mmdb" -exec cp {} /app/assets/GeoLite2-City.mmdb \;
+                else
+                  cp /tmp/GeoLite2-City.tar.gz /app/assets/GeoLite2-City.mmdb
+                fi
+                echo "GeoIP database ready at /app/assets/GeoLite2-City.mmdb"
+              else
+                echo "Failed to download GeoIP database"
+                exit 1
+              fi
+          volumeMounts:
+            - name: geoip-data
+              mountPath: /app/assets
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
       containers:
         - name: jw238dns
-          image: jw238dns:latest
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/jabberwocky238/jw238dns:latest
+          imagePullPolicy: Always
           ports:
             - name: dns-udp
               containerPort: 53
@@ -214,6 +245,9 @@ spec:
               readOnly: true
             - name: data
               mountPath: /app/data
+            - name: geoip-data
+              mountPath: /app/assets
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -250,6 +284,8 @@ spec:
           configMap:
             name: jw238dns-app-config
         - name: data
+          emptyDir: {}
+        - name: geoip-data
           emptyDir: {}
 
 ---
@@ -314,36 +350,6 @@ spec:
       protocol: TCP
   selector:
     app: jw238dns
-
----
-# Ingress for HTTP Management API (optional)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: jw238dns-http
-  namespace: jw238dns
-  labels:
-    app: jw238dns
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - dns-admin.example.com
-      secretName: jw238dns-http-tls
-  rules:
-    - host: dns-admin.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: jw238dns-http
-                port:
-                  name: http
 
 ---
 # HorizontalPodAutoscaler
