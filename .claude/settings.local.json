@@ -13,7 +13,8 @@
       "Bash(xxd:*)",
       "Bash(go run -e -c 'package main; import \\(\"\"encoding/json\"\"; \"\"fmt\"\"; \"\"os\"\"\\); func main\\(\\) { d, _ := os.ReadFile\\(\"\"assets/example-records.json\"\"\\); var v interface{}; if err := json.Unmarshal\\(d, &v\\); err != nil { fmt.Println\\(\"\"Invalid:\"\", err\\) } else { fmt.Println\\(\"\"Valid JSON\"\"\\) } }')",
       "Bash(python -c:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(find:*)"
     ]
   }
 }
