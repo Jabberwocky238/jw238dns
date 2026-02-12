@@ -2,6 +2,16 @@ package acme
 
 import "time"
 
+// EABConfig holds External Account Binding credentials for ACME providers
+// that require it (e.g., ZeroSSL).
+type EABConfig struct {
+	// KID is the EAB Key Identifier
+	KID string
+
+	// HMACKey is the EAB HMAC key
+	HMACKey string
+}
+
 // Config holds the ACME client configuration.
 type Config struct {
 	// ServerURL is the ACME directory URL (e.g., Let's Encrypt production/staging)
@@ -27,6 +37,9 @@ type Config struct {
 
 	// Storage configuration for certificates
 	Storage StorageConfig
+
+	// EAB holds External Account Binding credentials (optional, required for ZeroSSL)
+	EAB EABConfig
 }
 
 // StorageConfig defines where and how to store certificates.
@@ -65,4 +78,9 @@ func LetsEncryptProduction() string {
 // LetsEncryptStaging returns the Let's Encrypt staging server URL.
 func LetsEncryptStaging() string {
 	return "https://acme-staging-v02.api.letsencrypt.org/directory"
+}
+
+// ZeroSSLProduction returns the ZeroSSL production ACME server URL.
+func ZeroSSLProduction() string {
+	return "https://acme.zerossl.com/v2/DV90"
 }

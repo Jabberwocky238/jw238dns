@@ -12,6 +12,8 @@ This package implements DNS-01 ACME challenge support for automatic TLS certific
 - ✅ File system storage backend
 - ✅ Configurable renewal policies
 - ✅ Let's Encrypt production and staging support
+- ✅ ZeroSSL support with External Account Binding (EAB)
+- ✅ Mode switching between Let's Encrypt and ZeroSSL
 
 ## Architecture
 
@@ -84,6 +86,21 @@ manager.StartAutoRenewal(ctx)
 // Wildcard certificates require DNS-01 challenge
 domains := []string{"*.example.com", "example.com"}
 err := manager.ObtainCertificate(ctx, domains)
+```
+
+### ZeroSSL with EAB
+
+```go
+// ZeroSSL requires External Account Binding credentials
+config := &acme.Config{
+    ServerURL: acme.ZeroSSLProduction(),
+    Email:     "admin@example.com",
+    KeyType:   "RSA2048",
+    EAB: acme.EABConfig{
+        KID:     os.Getenv("ACME_EAB_KID"),
+        HMACKey: os.Getenv("ACME_EAB_HMAC"),
+    },
+}
 ```
 
 ### File Storage Backend
@@ -171,6 +188,8 @@ See `assets/example-acme-config.yaml` for a complete configuration example.
 | `CheckInterval` | Renewal check frequency | 24h |
 | `RenewBefore` | Renew before expiry | 30 days |
 | `PropagationWait` | DNS propagation wait | 60s |
+| `EAB.KID` | EAB Key Identifier (for ZeroSSL) | Empty |
+| `EAB.HMACKey` | EAB HMAC key (for ZeroSSL) | Empty |
 
 ### Supported Key Types
 

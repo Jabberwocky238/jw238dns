@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"jabberwocky238/jw238dns/acme"
 	"jabberwocky238/jw238dns/dns"
 	"jabberwocky238/jw238dns/storage"
 
@@ -225,10 +226,17 @@ type AuthConfig struct {
 	TokenEnv string `yaml:"token_env"`
 }
 
+type EABEnvConfig struct {
+	KidEnv  string `yaml:"kid_env"`
+	HmacEnv string `yaml:"hmac_env"`
+}
+
 type ACMEConfig struct {
 	Enabled   bool              `yaml:"enabled"`
+	Mode      string            `yaml:"mode"`
 	Server    string            `yaml:"server"`
 	Email     string            `yaml:"email"`
+	EAB       EABEnvConfig      `yaml:"eab"`
 	AutoRenew bool              `yaml:"auto_renew"`
 	Storage   ACMEStorageConfig `yaml:"storage"`
 }
@@ -237,4 +245,36 @@ type ACMEStorageConfig struct {
 	Type      string `yaml:"type"`
 	Namespace string `yaml:"namespace"`
 	Path      string `yaml:"path"`
+}
+
+// ToACMEConfig converts the YAML-based ACMEConfig to an acme.Config,
+// resolving EAB credentials from environment variables and server URL from mode.
+func (c *ACMEConfig) ToACMEConfig() *acme.Config {
+	serverURL := c.Server
+	if serverURL == "" {
+		switch c.Mode {
+		case "zerossl":
+			serverURL = acme.ZeroSSLProduction()
+		case "letsencrypt":
+			serverURL = acme.LetsEncryptProduction()
+		default:
+			// Default to Let's Encrypt production if no mode or server specified
+			serverURL = acme.LetsEncryptProduction()
+		}
+	}
+
+	return &acme.Config{
+		ServerURL: serverURL,
+		Email:     c.Email,
+		AutoRenew: c.AutoRenew,
+		EAB: acme.EABConfig{
+			KID:     os.Getenv(c.EAB.KidEnv),
+			HMACKey: os.Getenv(c.EAB.HmacEnv),
+		},
+		Storage: acme.StorageConfig{
+			Type:      c.Storage.Type,
+			Namespace: c.Storage.Namespace,
+			Path:      c.Storage.Path,
+		},
+	}
 }

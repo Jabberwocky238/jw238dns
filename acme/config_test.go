@@ -99,3 +99,69 @@ func TestConfig_CustomValues(t *testing.T) {
 		t.Errorf("Storage.Path = %v", config.Storage.Path)
 	}
 }
+
+func TestZeroSSLProduction(t *testing.T) {
+	url := ZeroSSLProduction()
+	expected := "https://acme.zerossl.com/v2/DV90"
+
+	if url != expected {
+		t.Errorf("ZeroSSLProduction() = %v, want %v", url, expected)
+	}
+}
+
+func TestConfig_WithEAB(t *testing.T) {
+	config := &Config{
+		ServerURL: ZeroSSLProduction(),
+		Email:     "admin@example.com",
+		KeyType:   "RSA2048",
+		AutoRenew: true,
+		EAB: EABConfig{
+			KID:     "test-kid-123",
+			HMACKey: "test-hmac-key-456",
+		},
+		Storage: StorageConfig{
+			Type:      "kubernetes-secret",
+			Namespace: "jw238dns",
+		},
+	}
+
+	if config.EAB.KID != "test-kid-123" {
+		t.Errorf("EAB.KID = %v, want test-kid-123", config.EAB.KID)
+	}
+
+	if config.EAB.HMACKey != "test-hmac-key-456" {
+		t.Errorf("EAB.HMACKey = %v, want test-hmac-key-456", config.EAB.HMACKey)
+	}
+
+	if config.ServerURL != ZeroSSLProduction() {
+		t.Errorf("ServerURL = %v, want %v", config.ServerURL, ZeroSSLProduction())
+	}
+}
+
+func TestConfig_WithoutEAB(t *testing.T) {
+	config := &Config{
+		ServerURL: LetsEncryptProduction(),
+		Email:     "admin@example.com",
+		KeyType:   "RSA2048",
+	}
+
+	if config.EAB.KID != "" {
+		t.Errorf("EAB.KID should be empty, got %v", config.EAB.KID)
+	}
+
+	if config.EAB.HMACKey != "" {
+		t.Errorf("EAB.HMACKey should be empty, got %v", config.EAB.HMACKey)
+	}
+}
+
+func TestDefaultConfig_EABEmpty(t *testing.T) {
+	config := DefaultConfig()
+
+	if config.EAB.KID != "" {
+		t.Errorf("DefaultConfig EAB.KID should be empty, got %v", config.EAB.KID)
+	}
+
+	if config.EAB.HMACKey != "" {
+		t.Errorf("DefaultConfig EAB.HMACKey should be empty, got %v", config.EAB.HMACKey)
+	}
+}

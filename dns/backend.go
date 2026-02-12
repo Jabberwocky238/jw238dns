@@ -33,19 +33,19 @@ type BackendConfig struct {
 // DefaultBackendConfig returns a BackendConfig with sensible defaults.
 func DefaultBackendConfig() BackendConfig {
 	return BackendConfig{
-		DefaultTTL:         300,
-		ResolveCNAMEChain:  true,
-		MaxCNAMEDepth:      10,
+		DefaultTTL:          300,
+		ResolveCNAMEChain:   true,
+		MaxCNAMEDepth:       10,
 		ReturnSOAOnNXDOMAIN: true,
 	}
 }
 
 // Backend implements DNSBackend using a CoreStorage for lookups.
 type Backend struct {
-	storage    storage.CoreStorage
-	config     BackendConfig
-	geoReader  geoip.IPLookup
-	geoCloser  func() error
+	storage   storage.CoreStorage
+	config    BackendConfig
+	geoReader geoip.IPLookup
+	geoCloser func() error
 }
 
 // NewBackend creates a Backend backed by the given storage and config.

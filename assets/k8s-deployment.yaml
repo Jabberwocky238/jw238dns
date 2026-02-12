@@ -19,24 +19,13 @@ metadata:
 data:
   config.yaml: |
     records:
-      - name: example.com.
+      - name: "*.mesh-worker.com."
         type: A
-        ttl: 300
+        ttl: 600
         value:
-          - 192.168.1.1
-          - 192.168.1.2
-
-      - name: example.com.
-        type: AAAA
-        ttl: 300
-        value:
-          - "2001:db8::1"
-
-      - name: www.example.com.
-        type: CNAME
-        ttl: 3600
-        value:
-          - example.com.
+          - 170.106.143.75
+          - 163.245.215.17
+          - 101.32.181.225
 
 ---
 # ConfigMap for application configuration
@@ -73,9 +62,21 @@ data:
         token_env: "HTTP_AUTH_TOKEN"
 
     acme:
-      enabled: false
-      server: "https://acme.zerossl.com/v2/DV90"
-      email: "admin@example.com"
+      enabled: true
+      # Mode: "letsencrypt" or "zerossl"
+      # - letsencrypt: uses Let's Encrypt (no EAB required)
+      # - zerossl: uses ZeroSSL (EAB required)
+      mode: "zerossl"
+      # Server URL is set based on mode:
+      # - letsencrypt -> https://acme-v02.api.letsencrypt.org/directory
+      # - zerossl -> https://acme.zerossl.com/v2/DV90
+      # Override with explicit server URL if needed:
+      # server: "https://acme.zerossl.com/v2/DV90"
+      email: "shadowsocks1984@gmail.com"
+      # EAB credentials (required for ZeroSSL, ignored for Let's Encrypt)
+      eab:
+        kid_env: "ACME_EAB_KID"
+        hmac_env: "ACME_EAB_HMAC"
       auto_renew: true
       storage:
         type: "kubernetes-secret"
@@ -93,7 +94,9 @@ metadata:
 type: Opaque
 stringData:
   http-token: "change-me-to-a-secure-random-token"
-  acme-email: "admin@example.com"
+  acme-email: "shadowsocks1984@gmail.com"
+  acme-eab-kid: "your-zerossl-eab-kid"
+  acme-eab-hmac: "your-zerossl-eab-hmac-key"
 
 ---
 # ServiceAccount
@@ -231,6 +234,16 @@ spec:
                 secretKeyRef:
                   name: jw238dns-auth
                   key: acme-email
+            - name: ACME_EAB_KID
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: acme-eab-kid
+            - name: ACME_EAB_HMAC
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: acme-eab-hmac
             - name: POD_NAME
               valueFrom:
                 fieldRef:

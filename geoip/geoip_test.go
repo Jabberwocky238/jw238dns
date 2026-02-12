@@ -72,7 +72,7 @@ func TestHaversine_KnownDistances(t *testing.T) {
 }
 
 func TestHaversine_Symmetry(t *testing.T) {
-	a := Coordinates{Latitude: 48.8566, Longitude: 2.3522}  // Paris
+	a := Coordinates{Latitude: 48.8566, Longitude: 2.3522}   // Paris
 	b := Coordinates{Latitude: 35.6762, Longitude: 139.6503} // Tokyo
 
 	ab := Haversine(a, b)
@@ -409,9 +409,9 @@ func TestRealWorldScenario_ThreeDatacenters(t *testing.T) {
 	// Create mock lookup with the three datacenter IPs
 	lookup := &mockLookup{
 		coords: map[string]*Coordinates{
-			"101.32.181.225":  &hongKong,      // Hong Kong
-			"170.106.143.75":  &siliconValley, // Silicon Valley
-			"163.245.215.17":  &newYork,       // New York
+			"101.32.181.225": &hongKong,      // Hong Kong
+			"170.106.143.75": &siliconValley, // Silicon Valley
+			"163.245.215.17": &newYork,       // New York
 		},
 	}
 

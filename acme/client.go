@@ -73,16 +73,34 @@ func NewClient(config *Config, store storage.CoreStorage) (*Client, error) {
 }
 
 // Register registers a new ACME account.
+// If EAB credentials are configured, it uses External Account Binding registration
+// (required by providers like ZeroSSL). Otherwise, it uses plain registration
+// (for Let's Encrypt and other providers that don't require EAB).
 func (c *Client) Register() error {
-	reg, err := c.legoClient.Registration.Register(registration.RegisterOptions{
-		TermsOfServiceAgreed: true,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to register ACME account: %w", err)
+	var reg *registration.Resource
+	var err error
+
+	if c.config.EAB.KID != "" {
+		reg, err = c.legoClient.Registration.RegisterWithExternalAccountBinding(registration.RegisterEABOptions{
+			TermsOfServiceAgreed: true,
+			Kid:                  c.config.EAB.KID,
+			HmacEncoded:          c.config.EAB.HMACKey,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to register ACME account with EAB: %w", err)
+		}
+		slog.Info("ACME account registered with EAB", "email", c.user.Email, "uri", reg.URI)
+	} else {
+		reg, err = c.legoClient.Registration.Register(registration.RegisterOptions{
+			TermsOfServiceAgreed: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to register ACME account: %w", err)
+		}
+		slog.Info("ACME account registered", "email", c.user.Email, "uri", reg.URI)
 	}
 
 	c.user.Registration = reg
-	slog.Info("ACME account registered", "email", c.user.Email, "uri", reg.URI)
 	return nil
 }
 

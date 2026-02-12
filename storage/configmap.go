@@ -9,11 +9,11 @@ import (
 
 	"jabberwocky238/jw238dns/types"
 
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"gopkg.in/yaml.v3"
 )
 
 // configYAML is the top-level structure inside the ConfigMap's config.yaml key.
@@ -30,8 +30,8 @@ type ConfigMapWatcher struct {
 	dataKey   string
 	store     *MemoryStorage
 
-	mu        sync.Mutex
-	syncing   bool // guards against echo loops during bidirectional sync
+	mu      sync.Mutex
+	syncing bool // guards against echo loops during bidirectional sync
 }
 
 // NewConfigMapWatcher creates a ConfigMapWatcher that watches the named

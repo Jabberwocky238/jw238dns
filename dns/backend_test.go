@@ -51,11 +51,11 @@ func TestBackend_Resolve(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name       string
-		query      *types.QueryInfo
-		wantErr    bool
-		wantCount  int
-		wantValue  string
+		name      string
+		query     *types.QueryInfo
+		wantErr   bool
+		wantCount int
+		wantValue string
 	}{
 		{
 			name:      "A record",
