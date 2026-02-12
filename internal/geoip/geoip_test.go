@@ -396,3 +396,185 @@ func TestSortValuesByDistance_Ordering(t *testing.T) {
 		t.Errorf("London (%.0f km) should be closer than Tokyo (%.0f km)", dLondon, dTokyo)
 	}
 }
+
+// TestRealWorldScenario_ThreeDatacenters tests a real-world scenario with three datacenters:
+// Hong Kong (101.32.181.225), Silicon Valley (170.106.143.75), New York (163.245.215.17)
+// Simulates access from each location and verifies correct distance-based sorting.
+func TestRealWorldScenario_ThreeDatacenters(t *testing.T) {
+	// Real datacenter locations (approximate coordinates)
+	hongKong := Coordinates{Latitude: 22.3193, Longitude: 114.1694}
+	siliconValley := Coordinates{Latitude: 37.3861, Longitude: -122.0839}
+	newYork := Coordinates{Latitude: 40.7128, Longitude: -74.0060}
+
+	// Create mock lookup with the three datacenter IPs
+	lookup := &mockLookup{
+		coords: map[string]*Coordinates{
+			"101.32.181.225":  &hongKong,      // Hong Kong
+			"170.106.143.75":  &siliconValley, // Silicon Valley
+			"163.245.215.17":  &newYork,       // New York
+		},
+	}
+
+	tests := []struct {
+		name           string
+		clientLocation Coordinates
+		clientCity     string
+		expectedOrder  []string
+		distances      []float64 // Expected approximate distances in km
+	}{
+		{
+			name:           "access from Hong Kong",
+			clientLocation: hongKong,
+			clientCity:     "Hong Kong",
+			expectedOrder:  []string{"101.32.181.225", "170.106.143.75", "163.245.215.17"},
+			distances:      []float64{0, 11130, 12970}, // HK->HK: 0km, HK->SV: ~11130km, HK->NY: ~12970km
+		},
+		{
+			name:           "access from Silicon Valley",
+			clientLocation: siliconValley,
+			clientCity:     "Silicon Valley",
+			expectedOrder:  []string{"170.106.143.75", "163.245.215.17", "101.32.181.225"},
+			distances:      []float64{0, 4130, 11130}, // SV->SV: 0km, SV->NY: ~4130km, SV->HK: ~11130km
+		},
+		{
+			name:           "access from New York",
+			clientLocation: newYork,
+			clientCity:     "New York",
+			expectedOrder:  []string{"163.245.215.17", "170.106.143.75", "101.32.181.225"},
+			distances:      []float64{0, 4130, 12970}, // NY->NY: 0km, NY->SV: ~4130km, NY->HK: ~12970km
+		},
+		{
+			name:           "access from London (equidistant test)",
+			clientLocation: Coordinates{Latitude: 51.5074, Longitude: -0.1278},
+			clientCity:     "London",
+			expectedOrder:  []string{"163.245.215.17", "170.106.143.75", "101.32.181.225"},
+			distances:      []float64{5570, 8637, 9623}, // London->NY: ~5570km, London->SV: ~8637km, London->HK: ~9623km
+		},
+		{
+			name:           "access from Tokyo",
+			clientLocation: Coordinates{Latitude: 35.6762, Longitude: 139.6503},
+			clientCity:     "Tokyo",
+			expectedOrder:  []string{"101.32.181.225", "170.106.143.75", "163.245.215.17"},
+			distances:      []float64{2900, 8280, 10850}, // Tokyo->HK: ~2900km, Tokyo->SV: ~8280km, Tokyo->NY: ~10850km
+		},
+		{
+			name:           "access from Sydney",
+			clientLocation: Coordinates{Latitude: -33.8688, Longitude: 151.2093},
+			clientCity:     "Sydney",
+			expectedOrder:  []string{"101.32.181.225", "170.106.143.75", "163.245.215.17"},
+			distances:      []float64{7380, 11950, 15990}, // Sydney->HK: ~7380km, Sydney->SV: ~11950km, Sydney->NY: ~15990km
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create DNS record with all three IPs in random order
+			rec := &types.DNSRecord{
+				Name:  "example.com.",
+				Type:  types.RecordTypeA,
+				TTL:   300,
+				Value: []string{"170.106.143.75", "101.32.181.225", "163.245.215.17"}, // Random initial order
+			}
+
+			// Sort by distance from client location
+			SortRecordsByDistance([]*types.DNSRecord{rec}, tt.clientLocation, lookup)
+
+			// Verify the order matches expected
+			for i, expectedIP := range tt.expectedOrder {
+				if rec.Value[i] != expectedIP {
+					t.Errorf("Position %d: expected %s, got %s", i, expectedIP, rec.Value[i])
+				}
+			}
+
+			// Log distances for verification
+			t.Logf("Client location: %s", tt.clientCity)
+			for i, ip := range rec.Value {
+				serverCoords, _ := lookup.Lookup(net.ParseIP(ip))
+				distance := Haversine(tt.clientLocation, *serverCoords)
+				t.Logf("  %d. %s (%.0f km)", i+1, ip, distance)
+
+				// Verify distance is within reasonable tolerance of expected
+				expectedDist := tt.distances[i]
+				tolerance := 100.0 // 100km tolerance for approximate coordinates
+				if math.Abs(distance-expectedDist) > tolerance {
+					t.Logf("    Warning: distance %.0f km differs from expected %.0f km (tolerance %.0f km)",
+						distance, expectedDist, tolerance)
+				}
+			}
+
+			// Verify distances are in ascending order (closest first)
+			for i := 0; i < len(rec.Value)-1; i++ {
+				ip1 := net.ParseIP(rec.Value[i])
+				ip2 := net.ParseIP(rec.Value[i+1])
+				coords1, _ := lookup.Lookup(ip1)
+				coords2, _ := lookup.Lookup(ip2)
+				dist1 := Haversine(tt.clientLocation, *coords1)
+				dist2 := Haversine(tt.clientLocation, *coords2)
+
+				if dist1 > dist2 {
+					t.Errorf("Distance ordering incorrect: IP %s (%.0f km) should be before IP %s (%.0f km)",
+						rec.Value[i], dist1, rec.Value[i+1], dist2)
+				}
+			}
+		})
+	}
+}
+
+// TestRealWorldScenario_MultipleRecords tests sorting multiple A records simultaneously
+func TestRealWorldScenario_MultipleRecords(t *testing.T) {
+	hongKong := Coordinates{Latitude: 22.3193, Longitude: 114.1694}
+	siliconValley := Coordinates{Latitude: 37.3861, Longitude: -122.0839}
+	newYork := Coordinates{Latitude: 40.7128, Longitude: -74.0060}
+
+	lookup := &mockLookup{
+		coords: map[string]*Coordinates{
+			"101.32.181.225": &hongKong,
+			"170.106.143.75": &siliconValley,
+			"163.245.215.17": &newYork,
+		},
+	}
+
+	// Client in Hong Kong
+	client := hongKong
+
+	records := []*types.DNSRecord{
+		{
+			Name:  "api.example.com.",
+			Type:  types.RecordTypeA,
+			TTL:   300,
+			Value: []string{"163.245.215.17", "170.106.143.75", "101.32.181.225"},
+		},
+		{
+			Name:  "cdn.example.com.",
+			Type:  types.RecordTypeA,
+			TTL:   300,
+			Value: []string{"170.106.143.75", "163.245.215.17", "101.32.181.225"},
+		},
+		{
+			Name:  "example.com.",
+			Type:  types.RecordTypeTXT,
+			TTL:   300,
+			Value: []string{"v=spf1 include:_spf.example.com ~all"},
+		},
+	}
+
+	SortRecordsByDistance(records, client, lookup)
+
+	// Both A records should be sorted with Hong Kong first
+	for i := 0; i < 2; i++ {
+		if records[i].Value[0] != "101.32.181.225" {
+			t.Errorf("Record %d: expected Hong Kong IP first, got %s", i, records[i].Value[0])
+		}
+		if records[i].Value[1] != "170.106.143.75" {
+			t.Errorf("Record %d: expected Silicon Valley IP second, got %s", i, records[i].Value[1])
+		}
+		if records[i].Value[2] != "163.245.215.17" {
+			t.Errorf("Record %d: expected New York IP third, got %s", i, records[i].Value[2])
+		}
+	}
+
+	// TXT record should be unchanged
+	if records[2].Value[0] != "v=spf1 include:_spf.example.com ~all" {
+		t.Errorf("TXT record should be unchanged")
+	}
+}
