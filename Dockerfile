@@ -14,10 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -o jw238dns \
-    ./cmd/jw238dns
+RUN go build -ldflags="-w -s" -o jw238dns ./cmd/jw238dns
 
 # Runtime stage
 FROM alpine:latest
@@ -26,8 +23,7 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates tzdata
 
 # Create non-root user
-RUN addgroup -g 1000 jw238dns && \
-    adduser -D -u 1000 -G jw238dns jw238dns
+RUN addgroup -g 1000 jw238dns && adduser -D -u 1000 -G jw238dns jw238dns
 
 WORKDIR /app
 
