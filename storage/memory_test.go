@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -390,5 +391,410 @@ func TestMemoryStorage_Delete_CleansUpEmptyDomain(t *testing.T) {
 	recs, _ := store.List(ctx)
 	if len(recs) != 0 {
 		t.Errorf("List() after deleting only record = %d, want 0", len(recs))
+	}
+}
+
+// TestMemoryStorage_Wildcard tests wildcard DNS record matching
+func TestMemoryStorage_Wildcard(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupRecords  []*types.DNSRecord
+		queryName     string
+		queryType     types.RecordType
+		wantErr       error
+		wantValues    []string
+		wantNoMatch   bool
+	}{
+		{
+			name: "single wildcard match - *.example.com",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"192.168.1.1", "192.168.1.2"},
+				},
+			},
+			queryName:  "test.example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"192.168.1.1", "192.168.1.2"},
+		},
+		{
+			name: "single wildcard match - different subdomain",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"10.0.0.1"},
+				},
+			},
+			queryName:  "api.example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"10.0.0.1"},
+		},
+		{
+			name: "nested wildcard - *.*.app.com",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.*.app.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"172.16.0.1"},
+				},
+			},
+			queryName:  "test.dev.app.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"172.16.0.1"},
+		},
+		{
+			name: "nested wildcard - different labels",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.*.app.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"172.16.0.2"},
+				},
+			},
+			queryName:  "api.prod.app.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"172.16.0.2"},
+		},
+		{
+			name: "triple wildcard - *.*.*.example.com",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.*.*.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"10.1.1.1"},
+				},
+			},
+			queryName:  "a.b.c.example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"10.1.1.1"},
+		},
+		{
+			name: "wildcard with exact match - exact wins",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"192.168.1.1"},
+				},
+				{
+					Name:  "test.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"10.0.0.1"},
+				},
+			},
+			queryName:  "test.example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"10.0.0.1"}, // Exact match should win
+		},
+		{
+			name: "wildcard no match - too few labels",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.*.app.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"172.16.0.1"},
+				},
+			},
+			queryName:   "test.app.com.", // Only 1 label before app.com
+			queryType:   types.RecordTypeA,
+			wantErr:     types.ErrRecordNotFound,
+			wantNoMatch: true,
+		},
+		{
+			name: "wildcard no match - too many labels",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"192.168.1.1"},
+				},
+			},
+			queryName:   "a.b.example.com.", // 2 labels, wildcard expects 1
+			queryType:   types.RecordTypeA,
+			wantErr:     types.ErrRecordNotFound,
+			wantNoMatch: true,
+		},
+		{
+			name: "wildcard AAAA record",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.ipv6.example.com.",
+					Type:  types.RecordTypeAAAA,
+					TTL:   300,
+					Value: []string{"2001:db8::1", "2001:db8::2"},
+				},
+			},
+			queryName:  "test.ipv6.example.com.",
+			queryType:  types.RecordTypeAAAA,
+			wantErr:    nil,
+			wantValues: []string{"2001:db8::1", "2001:db8::2"},
+		},
+		{
+			name: "wildcard TXT record",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.txt.example.com.",
+					Type:  types.RecordTypeTXT,
+					TTL:   60,
+					Value: []string{"v=spf1 include:example.com ~all"},
+				},
+			},
+			queryName:  "mail.txt.example.com.",
+			queryType:  types.RecordTypeTXT,
+			wantErr:    nil,
+			wantValues: []string{"v=spf1 include:example.com ~all"},
+		},
+		{
+			name: "wildcard CNAME record",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.cdn.example.com.",
+					Type:  types.RecordTypeCNAME,
+					TTL:   300,
+					Value: []string{"cdn.cloudfront.net."},
+				},
+			},
+			queryName:  "assets.cdn.example.com.",
+			queryType:  types.RecordTypeCNAME,
+			wantErr:    nil,
+			wantValues: []string{"cdn.cloudfront.net."},
+		},
+		{
+			name: "wildcard wrong type - no match",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"192.168.1.1"},
+				},
+			},
+			queryName:   "test.example.com.",
+			queryType:   types.RecordTypeMX,
+			wantErr:     types.ErrRecordNotFound,
+			wantNoMatch: true,
+		},
+		{
+			name: "middle wildcard - test.*.com",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "test.*.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"10.2.2.2"},
+				},
+			},
+			queryName:  "test.example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"10.2.2.2"},
+		},
+		{
+			name: "multiple wildcards in different positions",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.prod.*.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"10.3.3.3"},
+				},
+			},
+			queryName:  "api.prod.example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"10.3.3.3"},
+		},
+		{
+			name: "wildcard at TLD level - should not match",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"1.1.1.1"},
+				},
+			},
+			queryName:  "example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"1.1.1.1"},
+		},
+		{
+			name: "complex nested wildcard - *.*.*.*.example.com",
+			setupRecords: []*types.DNSRecord{
+				{
+					Name:  "*.*.*.*.example.com.",
+					Type:  types.RecordTypeA,
+					TTL:   300,
+					Value: []string{"10.4.4.4"},
+				},
+			},
+			queryName:  "a.b.c.d.example.com.",
+			queryType:  types.RecordTypeA,
+			wantErr:    nil,
+			wantValues: []string{"10.4.4.4"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewMemoryStorage()
+			ctx := context.Background()
+
+			// Setup records
+			for _, rec := range tt.setupRecords {
+				err := store.Create(ctx, rec)
+				if err != nil {
+					t.Fatalf("setup: failed to create record %s: %v", rec.Name, err)
+				}
+			}
+
+			// Query
+			recs, err := store.Get(ctx, tt.queryName, tt.queryType)
+
+			// Check error
+			if err != tt.wantErr {
+				t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// If we expect no match, we're done
+			if tt.wantNoMatch {
+				return
+			}
+
+			// Check values
+			if tt.wantErr == nil {
+				if len(recs) == 0 {
+					t.Fatal("Get() returned empty slice, want records")
+				}
+				if len(recs[0].Value) != len(tt.wantValues) {
+					t.Errorf("Get() returned %d values, want %d", len(recs[0].Value), len(tt.wantValues))
+					return
+				}
+				for i, wantVal := range tt.wantValues {
+					if recs[0].Value[i] != wantVal {
+						t.Errorf("Get() value[%d] = %q, want %q", i, recs[0].Value[i], wantVal)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestWildcardToRegex tests the wildcard to regex conversion function
+func TestWildcardToRegex(t *testing.T) {
+	tests := []struct {
+		wildcard    string
+		testDomain  string
+		shouldMatch bool
+	}{
+		{"*.example.com.", "test.example.com.", true},
+		{"*.example.com.", "api.example.com.", true},
+		{"*.example.com.", "a.b.example.com.", false},
+		{"*.example.com.", "example.com.", false},
+		{"*.*.app.com.", "test.dev.app.com.", true},
+		{"*.*.app.com.", "a.b.app.com.", true},
+		{"*.*.app.com.", "test.app.com.", false},
+		{"*.*.app.com.", "a.b.c.app.com.", false},
+		{"test.*.com.", "test.example.com.", true},
+		{"test.*.com.", "test.demo.com.", true},
+		{"test.*.com.", "prod.example.com.", false},
+		{"*.prod.*.com.", "api.prod.example.com.", true},
+		{"*.prod.*.com.", "web.prod.demo.com.", true},
+		{"*.prod.*.com.", "api.prod.a.b.com.", false},
+		{"*.*.*.example.com.", "a.b.c.example.com.", true},
+		{"*.*.*.example.com.", "x.y.z.example.com.", true},
+		{"*.*.*.example.com.", "a.b.example.com.", false},
+		{"*.com.", "example.com.", true},
+		{"*.com.", "test.example.com.", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.wildcard+" vs "+tt.testDomain, func(t *testing.T) {
+			pattern := wildcardToRegex(tt.wildcard)
+			matched, err := regexp.MatchString(pattern, tt.testDomain)
+			if err != nil {
+				t.Fatalf("regexp.MatchString() error = %v", err)
+			}
+			if matched != tt.shouldMatch {
+				t.Errorf("pattern %q matched %q = %v, want %v", pattern, tt.testDomain, matched, tt.shouldMatch)
+			}
+		})
+	}
+}
+
+// TestMemoryStorage_WildcardPriority tests that exact matches take priority over wildcards
+func TestMemoryStorage_WildcardPriority(t *testing.T) {
+	store := NewMemoryStorage()
+	ctx := context.Background()
+
+	// Create wildcard record
+	err := store.Create(ctx, &types.DNSRecord{
+		Name:  "*.example.com.",
+		Type:  types.RecordTypeA,
+		TTL:   300,
+		Value: []string{"192.168.1.1"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create wildcard record: %v", err)
+	}
+
+	// Create exact match record
+	err = store.Create(ctx, &types.DNSRecord{
+		Name:  "test.example.com.",
+		Type:  types.RecordTypeA,
+		TTL:   300,
+		Value: []string{"10.0.0.1"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create exact record: %v", err)
+	}
+
+	// Query should return exact match, not wildcard
+	recs, err := store.Get(ctx, "test.example.com.", types.RecordTypeA)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if len(recs) == 0 || len(recs[0].Value) == 0 {
+		t.Fatal("Get() returned no records")
+	}
+
+	if recs[0].Value[0] != "10.0.0.1" {
+		t.Errorf("Get() returned %q, want exact match %q (not wildcard %q)",
+			recs[0].Value[0], "10.0.0.1", "192.168.1.1")
+	}
+
+	// Query for different subdomain should return wildcard
+	recs, err = store.Get(ctx, "api.example.com.", types.RecordTypeA)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if len(recs) == 0 || len(recs[0].Value) == 0 {
+		t.Fatal("Get() returned no records")
+	}
+
+	if recs[0].Value[0] != "192.168.1.1" {
+		t.Errorf("Get() returned %q, want wildcard match %q",
+			recs[0].Value[0], "192.168.1.1")
 	}
 }

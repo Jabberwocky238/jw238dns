@@ -58,7 +58,8 @@ func (s *MemoryStorage) Get(_ context.Context, name string, recordType types.Rec
 func (s *MemoryStorage) matchWildcard(name string, recordType types.RecordType) []*types.DNSRecord {
 	// Try all stored wildcard patterns
 	for storedName, byType := range s.records {
-		if !strings.HasPrefix(storedName, "*.") {
+		// Check if this is a wildcard pattern (contains *)
+		if !strings.Contains(storedName, "*") {
 			continue // Not a wildcard pattern
 		}
 
