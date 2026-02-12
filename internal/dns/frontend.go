@@ -6,12 +6,27 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 
 	"jabberwocky238/jw238dns/internal/types"
 
 	"github.com/miekg/dns"
 )
+
+// clientIPKey is the context key for storing the client IP address.
+type clientIPKey struct{}
+
+// ContextWithClientIP returns a new context carrying the client IP.
+func ContextWithClientIP(ctx context.Context, ip net.IP) context.Context {
+	return context.WithValue(ctx, clientIPKey{}, ip)
+}
+
+// ClientIPFromContext extracts the client IP from the context, if present.
+func ClientIPFromContext(ctx context.Context) net.IP {
+	ip, _ := ctx.Value(clientIPKey{}).(net.IP)
+	return ip
+}
 
 // DNSFrontend receives and parses DNS queries.
 type DNSFrontend interface {
@@ -34,7 +49,8 @@ func NewFrontend(backend DNSBackend) *Frontend {
 }
 
 // ReceiveQuery parses the incoming DNS message, resolves it via the backend,
-// and builds a wire-format response.
+// and builds a wire-format response. If the context carries a client IP
+// (via ContextWithClientIP), it is attached to the QueryInfo for GeoIP sorting.
 func (f *Frontend) ReceiveQuery(ctx context.Context, query *dns.Msg) (*dns.Msg, error) {
 	info, err := f.ParseQuery(query)
 	if err != nil {
@@ -42,6 +58,9 @@ func (f *Frontend) ReceiveQuery(ctx context.Context, query *dns.Msg) (*dns.Msg, 
 		resp.SetRcode(query, dns.RcodeFormatError)
 		return resp, err
 	}
+
+	// Populate client IP from context for GeoIP-based sorting.
+	info.ClientIP = ClientIPFromContext(ctx)
 
 	slog.Debug("dns query received",
 		"domain", info.Domain,

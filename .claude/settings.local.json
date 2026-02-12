@@ -7,7 +7,9 @@
       "Bash(go mod tidy:*)",
       "Bash(go test:*)",
       "Bash(go vet:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(./.trellis/scripts/add-session.sh:*)",
+      "Bash(go tool cover:*)"
     ]
   }
 }

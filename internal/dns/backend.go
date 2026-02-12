@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"jabberwocky238/jw238dns/internal/geoip"
 	"jabberwocky238/jw238dns/internal/storage"
 	"jabberwocky238/jw238dns/internal/types"
 
@@ -21,10 +22,12 @@ type DNSBackend interface {
 
 // BackendConfig holds configurable behaviour for the Backend.
 type BackendConfig struct {
-	DefaultTTL         uint32 // Default TTL when record has none
-	ResolveCNAMEChain  bool   // Follow CNAME chains
-	MaxCNAMEDepth      int    // Maximum CNAME chain depth
-	ReturnSOAOnNXDOMAIN bool  // Attach SOA to NXDOMAIN responses
+	DefaultTTL          uint32 // Default TTL when record has none
+	ResolveCNAMEChain   bool   // Follow CNAME chains
+	MaxCNAMEDepth       int    // Maximum CNAME chain depth
+	ReturnSOAOnNXDOMAIN bool   // Attach SOA to NXDOMAIN responses
+	EnableGeoIP         bool   // Enable GeoIP distance-based sorting
+	MMDBPath            string // Path to MaxMind MMDB file
 }
 
 // DefaultBackendConfig returns a BackendConfig with sensible defaults.
@@ -39,16 +42,44 @@ func DefaultBackendConfig() BackendConfig {
 
 // Backend implements DNSBackend using a CoreStorage for lookups.
 type Backend struct {
-	storage storage.CoreStorage
-	config  BackendConfig
+	storage    storage.CoreStorage
+	config     BackendConfig
+	geoReader  geoip.IPLookup
+	geoCloser  func() error
 }
 
 // NewBackend creates a Backend backed by the given storage and config.
+// If GeoIP is enabled but the MMDB file cannot be opened, GeoIP is
+// disabled and a warning is logged.
 func NewBackend(store storage.CoreStorage, cfg BackendConfig) *Backend {
-	return &Backend{
+	b := &Backend{
 		storage: store,
 		config:  cfg,
 	}
+
+	if cfg.EnableGeoIP && cfg.MMDBPath != "" {
+		reader, err := geoip.NewReader(cfg.MMDBPath)
+		if err != nil {
+			slog.Warn("GeoIP disabled: failed to open MMDB",
+				"path", cfg.MMDBPath,
+				"error", err,
+			)
+			b.config.EnableGeoIP = false
+		} else {
+			b.geoReader = reader
+			b.geoCloser = reader.Close
+		}
+	}
+
+	return b
+}
+
+// Close releases resources held by the Backend, including the GeoIP reader.
+func (b *Backend) Close() error {
+	if b.geoCloser != nil {
+		return b.geoCloser()
+	}
+	return nil
 }
 
 // Resolve looks up records from storage. For non-SOA queries it will follow
@@ -59,13 +90,19 @@ func (b *Backend) Resolve(ctx context.Context, query *types.QueryInfo) ([]*types
 
 	// ANY query: return all record types for the domain.
 	if query.Type == dns.TypeANY {
-		return b.resolveAny(ctx, query.Domain)
+		recs, err := b.resolveAny(ctx, query.Domain)
+		if err != nil {
+			return nil, err
+		}
+		b.applyGeoSort(recs, query)
+		return recs, nil
 	}
 
 	// Direct lookup.
 	recs, err := b.storage.Get(ctx, query.Domain, rt)
 	if err == nil {
 		recs, _ = b.ApplyRules(ctx, recs)
+		b.applyGeoSort(recs, query)
 		return recs, nil
 	}
 
@@ -75,6 +112,7 @@ func (b *Backend) Resolve(ctx context.Context, query *types.QueryInfo) ([]*types
 		chainRecs, chainErr := b.resolveCNAMEChain(ctx, query.Domain, rt, 0)
 		if chainErr == nil && len(chainRecs) > 0 {
 			chainRecs, _ = b.ApplyRules(ctx, chainRecs)
+			b.applyGeoSort(chainRecs, query)
 			return chainRecs, nil
 		}
 	}
@@ -91,6 +129,25 @@ func (b *Backend) ApplyRules(_ context.Context, records []*types.DNSRecord) ([]*
 		}
 	}
 	return records, nil
+}
+
+// applyGeoSort sorts A and AAAA record values by distance from the client
+// IP when GeoIP is enabled. If the client IP is missing or cannot be looked
+// up, sorting is silently skipped.
+func (b *Backend) applyGeoSort(records []*types.DNSRecord, query *types.QueryInfo) {
+	if !b.config.EnableGeoIP || b.geoReader == nil {
+		return
+	}
+	if query.ClientIP == nil {
+		return
+	}
+
+	clientCoords, err := b.geoReader.Lookup(query.ClientIP)
+	if err != nil || clientCoords == nil {
+		return
+	}
+
+	geoip.SortRecordsByDistance(records, *clientCoords, b.geoReader)
 }
 
 // resolveCNAMEChain follows CNAME records up to MaxCNAMEDepth, collecting

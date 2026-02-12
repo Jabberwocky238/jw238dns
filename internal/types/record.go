@@ -2,7 +2,10 @@
 // used throughout the jw238dns module.
 package types
 
-import "errors"
+import (
+	"errors"
+	"net"
+)
 
 // RecordType represents a DNS record type.
 type RecordType string
@@ -49,9 +52,10 @@ type DNSRecord struct {
 
 // QueryInfo holds parsed information from a DNS query.
 type QueryInfo struct {
-	Domain string // FQDN being queried
-	Type   uint16 // DNS query type (dns.TypeA, dns.TypeAAAA, etc.)
-	Class  uint16 // DNS class (usually dns.ClassINET)
+	Domain   string // FQDN being queried
+	Type     uint16 // DNS query type (dns.TypeA, dns.TypeAAAA, etc.)
+	Class    uint16 // DNS class (usually dns.ClassINET)
+	ClientIP net.IP // Client IP address for GeoIP-based sorting
 }
 
 // RecordKey uniquely identifies a DNS record by name and type.

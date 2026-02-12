@@ -2,8 +2,11 @@ package dns
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"testing"
 
+	"jabberwocky238/jw238dns/internal/geoip"
 	"jabberwocky238/jw238dns/internal/storage"
 	"jabberwocky238/jw238dns/internal/types"
 
@@ -297,5 +300,199 @@ func TestBackend_Resolve_DirectCNAME(t *testing.T) {
 	}
 	if recs[0].Value[0] != "example.com." {
 		t.Errorf("CNAME target = %q, want %q", recs[0].Value[0], "example.com.")
+	}
+}
+
+// mockGeoLookup implements geoip.IPLookup for backend GeoIP tests.
+type mockGeoLookup struct {
+	coords map[string]*geoip.Coordinates
+}
+
+func (m *mockGeoLookup) Lookup(ip net.IP) (*geoip.Coordinates, error) {
+	c, ok := m.coords[ip.String()]
+	if !ok {
+		return nil, fmt.Errorf("IP not found: %s", ip)
+	}
+	return c, nil
+}
+
+func newMockGeoLookup() *mockGeoLookup {
+	return &mockGeoLookup{
+		coords: map[string]*geoip.Coordinates{
+			// Client in New York
+			"203.0.113.1": {Latitude: 40.7128, Longitude: -74.0060},
+			// Server in Toronto (close to NY)
+			"10.0.0.1": {Latitude: 43.6532, Longitude: -79.3832},
+			// Server in London
+			"10.0.0.2": {Latitude: 51.5074, Longitude: -0.1278},
+			// Server in Tokyo (far from NY)
+			"10.0.0.3": {Latitude: 35.6762, Longitude: 139.6503},
+		},
+	}
+}
+
+func setupGeoBackend(t *testing.T) (*Backend, *storage.MemoryStorage) {
+	t.Helper()
+	store := storage.NewMemoryStorage()
+	ctx := context.Background()
+
+	// A record with multiple IPs (Tokyo, London, Toronto order)
+	_ = store.Create(ctx, &types.DNSRecord{
+		Name: "geo.example.com.", Type: types.RecordTypeA, TTL: 300,
+		Value: []string{"10.0.0.3", "10.0.0.2", "10.0.0.1"},
+	})
+	_ = store.Create(ctx, &types.DNSRecord{
+		Name: "geo.example.com.", Type: types.RecordTypeTXT, TTL: 300,
+		Value: []string{"v=spf1 ~all"},
+	})
+
+	cfg := DefaultBackendConfig()
+	cfg.EnableGeoIP = true
+	backend := NewBackend(store, cfg)
+	backend.geoReader = newMockGeoLookup()
+
+	return backend, store
+}
+
+func TestBackend_GeoIP_SortsARecordsByDistance(t *testing.T) {
+	backend, _ := setupGeoBackend(t)
+	ctx := context.Background()
+
+	recs, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain:   "geo.example.com.",
+		Type:     dns.TypeA,
+		Class:    dns.ClassINET,
+		ClientIP: net.ParseIP("203.0.113.1"), // New York
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if len(recs) != 1 {
+		t.Fatalf("Resolve() returned %d records, want 1", len(recs))
+	}
+
+	// Expected order: Toronto (closest), London, Tokyo (farthest)
+	if recs[0].Value[0] != "10.0.0.1" {
+		t.Errorf("closest IP should be Toronto (10.0.0.1), got %s", recs[0].Value[0])
+	}
+	if recs[0].Value[1] != "10.0.0.2" {
+		t.Errorf("middle IP should be London (10.0.0.2), got %s", recs[0].Value[1])
+	}
+	if recs[0].Value[2] != "10.0.0.3" {
+		t.Errorf("farthest IP should be Tokyo (10.0.0.3), got %s", recs[0].Value[2])
+	}
+}
+
+func TestBackend_GeoIP_SkipsWhenNoClientIP(t *testing.T) {
+	backend, _ := setupGeoBackend(t)
+	ctx := context.Background()
+
+	recs, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain: "geo.example.com.",
+		Type:   dns.TypeA,
+		Class:  dns.ClassINET,
+		// No ClientIP set
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	// Original order preserved: Tokyo, London, Toronto
+	if recs[0].Value[0] != "10.0.0.3" {
+		t.Errorf("without client IP, original order should be preserved, got %v", recs[0].Value)
+	}
+}
+
+func TestBackend_GeoIP_SkipsNonARecords(t *testing.T) {
+	backend, _ := setupGeoBackend(t)
+	ctx := context.Background()
+
+	recs, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain:   "geo.example.com.",
+		Type:     dns.TypeTXT,
+		Class:    dns.ClassINET,
+		ClientIP: net.ParseIP("203.0.113.1"),
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	if recs[0].Value[0] != "v=spf1 ~all" {
+		t.Errorf("TXT record should be unchanged, got %v", recs[0].Value)
+	}
+}
+
+func TestBackend_GeoIP_SkipsWhenDisabled(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	ctx := context.Background()
+
+	_ = store.Create(ctx, &types.DNSRecord{
+		Name: "geo.example.com.", Type: types.RecordTypeA, TTL: 300,
+		Value: []string{"10.0.0.3", "10.0.0.2", "10.0.0.1"},
+	})
+
+	cfg := DefaultBackendConfig()
+	cfg.EnableGeoIP = false
+	backend := NewBackend(store, cfg)
+
+	recs, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain:   "geo.example.com.",
+		Type:     dns.TypeA,
+		Class:    dns.ClassINET,
+		ClientIP: net.ParseIP("203.0.113.1"),
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	// Original order preserved when GeoIP disabled
+	if recs[0].Value[0] != "10.0.0.3" {
+		t.Errorf("with GeoIP disabled, original order should be preserved, got %v", recs[0].Value)
+	}
+}
+
+func TestBackend_GeoIP_SkipsUnknownClientIP(t *testing.T) {
+	backend, _ := setupGeoBackend(t)
+	ctx := context.Background()
+
+	recs, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain:   "geo.example.com.",
+		Type:     dns.TypeA,
+		Class:    dns.ClassINET,
+		ClientIP: net.ParseIP("192.168.99.99"), // Not in mock lookup
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	// Original order preserved when client IP not in DB
+	if recs[0].Value[0] != "10.0.0.3" {
+		t.Errorf("with unknown client IP, original order should be preserved, got %v", recs[0].Value)
+	}
+}
+
+func TestBackend_NewBackend_GeoIPInvalidPath(t *testing.T) {
+	store := storage.NewMemoryStorage()
+
+	cfg := DefaultBackendConfig()
+	cfg.EnableGeoIP = true
+	cfg.MMDBPath = "/nonexistent/path.mmdb"
+
+	backend := NewBackend(store, cfg)
+
+	// GeoIP should be disabled after failing to open MMDB
+	if backend.config.EnableGeoIP {
+		t.Error("EnableGeoIP should be false after MMDB open failure")
+	}
+	if backend.geoReader != nil {
+		t.Error("geoReader should be nil after MMDB open failure")
+	}
+}
+
+func TestBackend_Close_NoGeoIP(t *testing.T) {
+	backend, _ := setupBackend(t)
+	err := backend.Close()
+	if err != nil {
+		t.Errorf("Close() without GeoIP should return nil, got %v", err)
 	}
 }
