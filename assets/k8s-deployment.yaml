@@ -19,6 +19,42 @@ metadata:
 data:
   config.yaml: |
     records:
+      # SOA record - required for authoritative DNS server
+      - name: "mesh-worker.com."
+        type: SOA
+        ttl: 3600
+        value:
+          - "ns1.mesh-worker.com. admin.mesh-worker.com. 2026021201 3600 1800 604800 86400"
+
+      # NS records - nameservers for the domain
+      - name: "mesh-worker.com."
+        type: NS
+        ttl: 3600
+        value:
+          - "ns1.mesh-worker.com."
+          - "ns2.mesh-worker.com."
+          - "ns3.mesh-worker.com."
+
+      # A records for nameservers
+      - name: "ns1.mesh-worker.com."
+        type: A
+        ttl: 3600
+        value:
+          - 170.106.143.75
+
+      - name: "ns2.mesh-worker.com."
+        type: A
+        ttl: 3600
+        value:
+          - 163.245.215.17
+
+      - name: "ns3.mesh-worker.com."
+        type: A
+        ttl: 3600
+        value:
+          - 101.32.181.225
+
+      # Wildcard A record
       - name: "*.mesh-worker.com."
         type: A
         ttl: 600
@@ -174,6 +210,15 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: jw238dns
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: tag
+                    operator: In
+                    values:
+                      - ingress
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -234,22 +279,23 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 2
+          # TODO: Enable health checks after implementing HTTP server (task: 02-12-http-endpoints)
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: http
+          #   initialDelaySeconds: 10
+          #   periodSeconds: 30
+          #   timeoutSeconds: 5
+          #   failureThreshold: 3
+          # readinessProbe:
+          #   httpGet:
+          #     path: /health
+          #     port: http
+          #   initialDelaySeconds: 5
+          #   periodSeconds: 10
+          #   timeoutSeconds: 3
+          #   failureThreshold: 2
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -58,14 +58,16 @@ func main() {
 	// Initialize storage
 	store := storage.NewMemoryStorage()
 
-	// Load initial records from file if configured
+	// Create context for background tasks
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Load initial records based on storage type
 	if config.Storage.Type == "file" {
 		loader := storage.NewJSONFileLoader(config.Storage.File.Path, store)
 		records, err := loader.Load()
 		if err != nil {
 			slog.Warn("Failed to load initial records", "error", err)
 		} else {
-			ctx := context.Background()
 			for _, record := range records {
 				if err := store.Create(ctx, record); err != nil {
 					slog.Warn("Failed to create record", "name", record.Name, "error", err)
@@ -73,6 +75,35 @@ func main() {
 			}
 			slog.Info("Loaded initial records", "count", len(records))
 		}
+	} else if config.Storage.Type == "configmap" {
+		// Initialize Kubernetes client for ConfigMap storage
+		k8sClient, err := storage.NewK8sClient()
+		if err != nil {
+			slog.Error("Failed to create Kubernetes client", "error", err)
+			os.Exit(1)
+		}
+
+		// Create ConfigMap watcher
+		watcher := storage.NewConfigMapWatcher(
+			k8sClient,
+			config.Storage.ConfigMap.Namespace,
+			config.Storage.ConfigMap.Name,
+			config.Storage.ConfigMap.DataKey,
+			store,
+		)
+
+		// Start watching ConfigMap in background
+		go func() {
+			slog.Info("Starting ConfigMap watcher",
+				"namespace", config.Storage.ConfigMap.Namespace,
+				"name", config.Storage.ConfigMap.Name,
+				"key", config.Storage.ConfigMap.DataKey)
+			if err := watcher.WatchAndSync(ctx); err != nil {
+				slog.Error("ConfigMap watcher failed", "error", err)
+			}
+		}()
+
+		slog.Info("ConfigMap storage initialized")
 	}
 
 	// Initialize DNS backend with config
@@ -90,7 +121,6 @@ func main() {
 	dnsHandler := &DNSHandler{frontend: frontend}
 
 	// Start DNS servers
-	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	if config.DNS.UDPEnabled {
