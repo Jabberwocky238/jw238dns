@@ -2,7 +2,7 @@
 FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git ca-certificates tzdata curl
 
 WORKDIR /build
 
@@ -12,6 +12,12 @@ RUN go mod download
 
 # Copy source code
 COPY . .
+
+# Download GeoIP database during build
+RUN mkdir -p assets && \
+    curl -L -o assets/GeoLite2-City.mmdb \
+    "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" && \
+    ls -lh assets/GeoLite2-City.mmdb
 
 # Build the application
 RUN go build -ldflags="-w -s" -o jw238dns ./cmd/jw238dns

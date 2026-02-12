@@ -95,8 +95,8 @@ type: Opaque
 stringData:
   http-token: "change-me-to-a-secure-random-token"
   acme-email: "shadowsocks1984@gmail.com"
-  acme-eab-kid: "your-zerossl-eab-kid"
-  acme-eab-hmac: "your-zerossl-eab-hmac-key"
+  acme-eab-kid: "${ZEROSSL_EAB_KID}"
+  acme-eab-hmac: "${ZEROSSL_EAB_HMAC_KEY}"
 
 ---
 # ServiceAccount
@@ -178,37 +178,6 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-      initContainers:
-        - name: download-geoip
-          image: curlimages/curl:latest
-          command:
-            - sh
-            - -c
-            - |
-              echo "Downloading GeoLite2-City.mmdb..."
-              curl -L -o /tmp/GeoLite2-City.tar.gz "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
-              if [ $? -eq 0 ]; then
-                echo "Download completed successfully"
-                # If it's a tar.gz, extract it; otherwise just copy
-                if file /tmp/GeoLite2-City.tar.gz | grep -q "gzip"; then
-                  tar -xzf /tmp/GeoLite2-City.tar.gz -C /tmp --strip-components=1 "*/GeoLite2-City.mmdb" 2>/dev/null || tar -xzf /tmp/GeoLite2-City.tar.gz -C /tmp
-                  find /tmp -name "GeoLite2-City.mmdb" -exec cp {} /app/assets/GeoLite2-City.mmdb \;
-                else
-                  cp /tmp/GeoLite2-City.tar.gz /app/assets/GeoLite2-City.mmdb
-                fi
-                echo "GeoIP database ready at /app/assets/GeoLite2-City.mmdb"
-              else
-                echo "Failed to download GeoIP database"
-                exit 1
-              fi
-          volumeMounts:
-            - name: geoip-data
-              mountPath: /app/assets
-          securityContext:
-            runAsUser: 1000
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
       containers:
         - name: jw238dns
           image: ghcr.io/jabberwocky238/jw238dns:latest
@@ -258,9 +227,6 @@ spec:
               readOnly: true
             - name: data
               mountPath: /app/data
-            - name: geoip-data
-              mountPath: /app/assets
-              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -297,8 +263,6 @@ spec:
           configMap:
             name: jw238dns-app-config
         - name: data
-          emptyDir: {}
-        - name: geoip-data
           emptyDir: {}
 
 ---
@@ -408,21 +372,3 @@ spec:
   selector:
     matchLabels:
       app: jw238dns
-
----
-# ServiceMonitor for Prometheus (if using Prometheus Operator)
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: jw238dns
-  namespace: jw238dns
-  labels:
-    app: jw238dns
-spec:
-  selector:
-    matchLabels:
-      app: jw238dns
-  endpoints:
-    - port: http
-      path: /metrics
-      interval: 30s
