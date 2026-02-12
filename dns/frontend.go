@@ -171,28 +171,6 @@ func (f *Frontend) ParseQuery(query *dns.Msg) (*types.QueryInfo, error) {
 	}, nil
 }
 
-// extractZone extracts the zone (base domain) from a fully qualified domain name.
-// For example: test.mesh-worker.cloud. -> mesh-worker.cloud.
-// This is a simple implementation that assumes the zone is the last two labels.
-func extractZone(domain string) string {
-	if domain == "" || domain == "." {
-		return ""
-	}
-
-	// Remove trailing dot if present
-	domain = strings.TrimSuffix(domain, ".")
-
-	// Split by dots
-	labels := strings.Split(domain, ".")
-	if len(labels) < 2 {
-		return domain + "."
-	}
-
-	// Return last two labels as zone (e.g., mesh-worker.cloud)
-	zone := labels[len(labels)-2] + "." + labels[len(labels)-1] + "."
-	return zone
-}
-
 // buildRR converts a DNSRecord into a dns.RR suitable for a response message.
 // Returns nil if the record type is unsupported or the value is empty.
 func buildRR(record *types.DNSRecord) dns.RR {
