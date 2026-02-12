@@ -1,0 +1,409 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jw238dns
+  labels:
+    app: jw238dns
+
+---
+# ConfigMap for DNS records
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jw238dns-config
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+data:
+  config.yaml: |
+    records:
+      - name: example.com.
+        type: A
+        ttl: 300
+        value:
+          - 192.168.1.1
+          - 192.168.1.2
+
+      - name: example.com.
+        type: AAAA
+        ttl: 300
+        value:
+          - "2001:db8::1"
+
+      - name: www.example.com.
+        type: CNAME
+        ttl: 3600
+        value:
+          - example.com.
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jw238dns-app-config
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+data:
+  app.yaml: |
+    dns:
+      listen: "0.0.0.0:53"
+      tcp_enabled: true
+      udp_enabled: true
+
+    geoip:
+      enabled: true
+      mmdb_path: "/app/assets/GeoLite2-City.mmdb"
+
+    storage:
+      type: "configmap"
+      configmap:
+        namespace: "jw238dns"
+        name: "jw238dns-config"
+        data_key: "config.yaml"
+
+    http:
+      enabled: true
+      listen: "0.0.0.0:8080"
+      auth:
+        enabled: true
+        token_env: "HTTP_AUTH_TOKEN"
+
+    acme:
+      enabled: false
+      server: "https://acme-staging-v02.api.letsencrypt.org/directory"
+      email: "admin@example.com"
+      auto_renew: true
+      storage:
+        type: "kubernetes-secret"
+        namespace: "jw238dns"
+
+---
+# Secret for authentication
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jw238dns-auth
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+type: Opaque
+stringData:
+  http-token: "change-me-to-a-secure-random-token"
+  acme-email: "admin@example.com"
+
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jw238dns
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+
+---
+# Role for ConfigMap and Secret access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jw238dns
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+rules:
+  # ConfigMap access for DNS records
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  # Secret access for certificates
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jw238dns
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jw238dns
+subjects:
+  - kind: ServiceAccount
+    name: jw238dns
+    namespace: jw238dns
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jw238dns
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: jw238dns
+  template:
+    metadata:
+      labels:
+        app: jw238dns
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: jw238dns
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: jw238dns
+          image: jw238dns:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: HTTP_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: http-token
+            - name: ACME_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: acme-email
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+      volumes:
+        - name: config
+          configMap:
+            name: jw238dns-app-config
+        - name: data
+          emptyDir: {}
+
+---
+# Service for DNS (UDP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: jw238dns-dns-udp
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - name: dns-udp
+      port: 53
+      targetPort: dns-udp
+      protocol: UDP
+  selector:
+    app: jw238dns
+
+---
+# Service for DNS (TCP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: jw238dns-dns-tcp
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - name: dns-tcp
+      port: 53
+      targetPort: dns-tcp
+      protocol: TCP
+  selector:
+    app: jw238dns
+
+---
+# Service for HTTP Management API
+apiVersion: v1
+kind: Service
+metadata:
+  name: jw238dns-http
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: jw238dns
+
+---
+# Ingress for HTTP Management API (optional)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jw238dns-http
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - dns-admin.example.com
+      secretName: jw238dns-http-tls
+  rules:
+    - host: dns-admin.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jw238dns-http
+                port:
+                  name: http
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jw238dns
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jw238dns
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jw238dns
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: jw238dns
+
+---
+# ServiceMonitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jw238dns
+  namespace: jw238dns
+  labels:
+    app: jw238dns
+spec:
+  selector:
+    matchLabels:
+      app: jw238dns
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
