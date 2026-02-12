@@ -22,12 +22,6 @@ When you learn something valuable (from debugging, implementing, or discussion),
 
 ```
 .trellis/spec/
-├── backend/           # Backend development standards
-│   ├── index.md       # Overview and links
-│   └── *.md           # Topic-specific guidelines
-├── frontend/          # Frontend development standards
-│   ├── index.md       # Overview and links
-│   └── *.md           # Topic-specific guidelines
 └── guides/            # Thinking guides
     ├── index.md       # Guide index
     └── *.md           # Topic-specific guides
@@ -166,8 +160,6 @@ If you're unsure what to update, answer these prompts:
    - No → Maybe not worth documenting
 
 4. **Which area does it relate to?**
-   - [ ] Backend code
-   - [ ] Frontend code
    - [ ] Cross-layer data flow
    - [ ] Code organization/reuse
    - [ ] Quality/testing

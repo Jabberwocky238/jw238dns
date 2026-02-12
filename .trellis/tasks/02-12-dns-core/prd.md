@@ -1,93 +1,69 @@
-# 实现DNS核心功能
+# DNS Core Implementation
 
 ## Goal
-实现DNS服务器核心功能，使用现成的DNS库处理DNS查询请求，支持常见的DNS记录类型，并与存储层集成。
+Implement the core DNS functionality including Frontend (query receiver), Backend (response generator), and Core Storage (in-memory storage with hot reload capability).
 
 ## Requirements
 
-### DNS服务器实现
-- 使用成熟的Go DNS库（推荐miekg/dns）
-- 支持UDP和TCP协议
-- 监听标准DNS端口（53）或自定义端口
-- 支持并发处理多个DNS查询
+### 1. Core Types (`internal/types/`)
+- Define `DNSRecord` struct with Name, Type, TTL, Value fields
+- Define `RecordType` constants (A, AAAA, CNAME, MX, TXT, NS, SRV, PTR, SOA, CAA)
+- Define `QueryInfo`, `RecordKey`, `RecordChanges`, `StorageEvent` types
+- Define sentinel errors (ErrRecordNotFound, ErrRecordExists, etc.)
+- Add validation methods (IsValid for RecordType)
 
-### 支持的记录类型（必须兼容）
-- A记录（IPv4地址）
-- AAAA记录（IPv6地址）
-- CNAME记录（别名）
-- TXT记录（文本记录，用于DNS01验证）
-- SRV记录（服务记录，格式：priority weight port target）
-- MX记录（邮件交换，包含优先级）
-- NS记录（域名服务器）
+### 2. Core Storage (`internal/storage/`)
+- Implement `CoreStorage` interface with CRUD operations
+- Implement `MemoryStorage` with thread-safe map-based storage
+- Support concurrent reads/writes using `sync.RWMutex`
+- Implement hot reload functionality:
+  - `HotReload`: Full reload
+  - `PartialReload`: Only reload changed records
+  - Change detection with `calculateChanges`
+  - Atomic updates with zero downtime
+- Implement `Watch` for event notifications
 
-### 查询处理
-- 从存储层读取DNS记录
-- 支持通配符域名（*.example.com）
-- 实现DNS缓存机制（可选，提高性能）
-- 支持递归查询和迭代查询
-- 处理不存在的域名（NXDOMAIN）
+### 3. DNS Frontend (`internal/dns/`)
+- Implement `DNSFrontend` interface
+- Receive and parse all DNS query types (A, AAAA, CNAME, MX, TXT, etc.)
+- Validate query format
+- Use `github.com/miekg/dns` library
+- Support both UDP and TCP on port 53
 
-### 性能和可靠性
-- 支持优雅关闭
-- 实现健康检查接口
-- 记录查询日志（可配置级别）
-- 支持metrics导出（Prometheus格式）
+### 4. DNS Backend (`internal/dns/`)
+- Implement `DNSBackend` interface
+- Resolve queries from Core Storage
+- Handle CNAME chain resolution (max depth: 10)
+- Return SOA on NXDOMAIN
+- Apply configurable rules
 
 ## Acceptance Criteria
 
-- [ ] 使用miekg/dns库实现DNS服务器
-- [ ] 支持UDP和TCP协议监听
-- [ ] 实现所有要求的DNS记录类型查询
-- [ ] 与存储层接口集成
-- [ ] 实现通配符域名匹配
-- [ ] 添加单元测试和集成测试
-- [ ] 实现优雅关闭机制
-- [ ] 提供配置文件示例
-- [ ] 代码通过golangci-lint检查
+- [ ] All types defined in `internal/types/record.go` with tests
+- [ ] `CoreStorage` interface and `MemoryStorage` implementation complete
+- [ ] Hot reload works with partial updates (only changed records)
+- [ ] Thread-safe concurrent operations verified with tests
+- [ ] DNS Frontend can parse all supported query types
+- [ ] DNS Backend resolves queries correctly
+- [ ] CNAME chain resolution works with depth limit
+- [ ] All modules have corresponding `*_test.go` files
+- [ ] Test coverage >90% for storage, >85% for DNS handlers
+- [ ] All tests pass with `go test ./...`
+- [ ] Code passes `go vet` and `golangci-lint`
 
 ## Technical Notes
 
-### 推荐使用的库
-- `github.com/miekg/dns` - DNS协议实现（最流行的Go DNS库）
-- `github.com/prometheus/client_golang` - Prometheus metrics
-- 标准库 `context` - 上下文管理
+- Module path: `jabberwocky238/jw238dns`
+- Go version: 1.24.2
+- Required dependency: `github.com/miekg/dns`
+- Entry point will be at `cmd/jw238dns/main.go` (not part of this task)
+- Use structured logging with `log/slog`
+- Follow table-driven test pattern from spec
+- All exported functions must have godoc comments
 
-### 核心结构设计
-```go
-type DNSServer struct {
-    storage  storage.Storage
-    udpServer *dns.Server
-    tcpServer *dns.Server
-    cache    Cache // 可选
-}
-
-func (s *DNSServer) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-    // 处理DNS查询
-}
-```
-
-### 配置示例
-```yaml
-dns:
-  listen: "0.0.0.0:53"
-  protocols: ["udp", "tcp"]
-  cache:
-    enabled: true
-    ttl: 300
-  logging:
-    level: info
-    queries: true
-```
-
-### 目录结构建议
-```
-pkg/dns/
-├── server.go         # DNS服务器主逻辑
-├── handler.go        # 查询处理器
-├── cache.go          # 缓存实现（可选）
-├── metrics.go        # Metrics收集
-└── config.go         # 配置结构
-```
-
-## Dependencies
-- 依赖：02-12-storage-layer（存储层必须先完成）
+## Out of Scope (Future Tasks)
+- HTTP Management API
+- ConfigMap integration
+- ACME challenge handlers
+- Kubernetes deployment
+- Main application entry point

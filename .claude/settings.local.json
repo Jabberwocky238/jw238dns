@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(./.trellis/scripts/get-context.sh:*)",
-      "Bash(./.trellis/scripts/task.sh:*)"
+      "Bash(./.trellis/scripts/task.sh:*)",
+      "Bash(go get:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go build:*)"
     ]
   }
 }
