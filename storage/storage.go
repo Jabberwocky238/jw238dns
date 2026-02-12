@@ -5,7 +5,7 @@ package storage
 import (
 	"context"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 // CoreStorage defines the interface for DNS record storage with CRUD

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"jabberwocky238/jw238dns/internal/storage"
+	"jabberwocky238/jw238dns/storage"
 
 	"github.com/go-acme/lego/v4/certificate"
 )

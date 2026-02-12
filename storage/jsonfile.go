@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 
 	"github.com/fsnotify/fsnotify"
 )

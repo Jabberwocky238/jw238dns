@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 func setupTestStorage(t *testing.T) *MemoryStorage {

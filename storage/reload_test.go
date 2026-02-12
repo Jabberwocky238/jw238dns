@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 func TestMemoryStorage_CalculateChanges(t *testing.T) {

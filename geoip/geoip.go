@@ -9,7 +9,7 @@ import (
 
 	"github.com/oschwald/geoip2-golang"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 // earthRadiusKm is the mean radius of the Earth in kilometers.

@@ -6,7 +6,7 @@ import (
 	"net"
 	"testing"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 func TestHaversine_KnownDistances(t *testing.T) {

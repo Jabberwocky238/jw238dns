@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 // CalculateChanges compares a new set of records against the current contents

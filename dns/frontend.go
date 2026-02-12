@@ -9,7 +9,7 @@ import (
 	"net"
 	"strings"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 
 	"github.com/miekg/dns"
 )

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"jabberwocky238/jw238dns/internal/storage"
+	"jabberwocky238/jw238dns/storage"
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"

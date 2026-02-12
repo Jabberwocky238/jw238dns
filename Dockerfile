@@ -34,8 +34,7 @@ COPY --from=builder /build/jw238dns /app/jw238dns
 COPY --from=builder /build/assets /app/assets
 
 # Create directories for data
-RUN mkdir -p /app/data /app/certs && \
-    chown -R jw238dns:jw238dns /app
+RUN mkdir -p /app/data /app/certs && chown -R jw238dns:jw238dns /app
 
 # Switch to non-root user
 USER jw238dns

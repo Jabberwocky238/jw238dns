@@ -6,9 +6,9 @@ import (
 	"net"
 	"testing"
 
-	"jabberwocky238/jw238dns/internal/geoip"
-	"jabberwocky238/jw238dns/internal/storage"
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/geoip"
+	"jabberwocky238/jw238dns/storage"
+	"jabberwocky238/jw238dns/types"
 
 	"github.com/miekg/dns"
 )

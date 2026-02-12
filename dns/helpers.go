@@ -8,7 +8,7 @@ import (
 
 	"github.com/miekg/dns"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 // parseIP parses an IP address string into a net.IP.

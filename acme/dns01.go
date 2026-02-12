@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"jabberwocky238/jw238dns/internal/storage"
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/storage"
+	"jabberwocky238/jw238dns/types"
 
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/registration"

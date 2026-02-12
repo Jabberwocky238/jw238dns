@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"jabberwocky238/jw238dns/internal/types"
+	"jabberwocky238/jw238dns/types"
 )
 
 // MemoryStorage is a thread-safe in-memory implementation of CoreStorage.
