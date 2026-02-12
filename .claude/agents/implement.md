@@ -39,12 +39,6 @@ Before implementing, read:
 
 ### 1. Understand Specs
 
-Read relevant specs based on task type:
-
-- Backend: `.trellis/spec/backend/`
-- Frontend: `.trellis/spec/frontend/`
-- Shared: `.trellis/spec/shared/`
-
 ### 2. Understand Requirements
 
 Read the task's prd.md and info.md:

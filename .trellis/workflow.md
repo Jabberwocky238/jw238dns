@@ -52,41 +52,9 @@ This creates:
 git status && git log --oneline -10      # Git state
 ```
 
-### Step 2: Read Project Guidelines [MANDATORY]
-
-**CRITICAL**: Read guidelines before writing any code:
-
-```bash
-# Read frontend guidelines index (if applicable)
-cat .trellis/spec/frontend/index.md
-
-# Read backend guidelines index (if applicable)
-cat .trellis/spec/backend/index.md
-```
-
-**Why read both?**
-- Understand the full project architecture
-- Know coding standards for the entire codebase
-- See how frontend and backend interact
-- Learn the overall code quality requirements
-
 ### Step 3: Before Coding - Read Specific Guidelines (Required)
 
 Based on your task, read the **detailed** guidelines:
-
-**Frontend Task**:
-```bash
-cat .trellis/spec/frontend/hook-guidelines.md      # For hooks
-cat .trellis/spec/frontend/component-guidelines.md # For components
-cat .trellis/spec/frontend/type-safety.md          # For types
-```
-
-**Backend Task**:
-```bash
-cat .trellis/spec/backend/database-guidelines.md   # For DB operations
-cat .trellis/spec/backend/type-safety.md           # For types
-cat .trellis/spec/backend/logging-guidelines.md    # For logging
-```
 
 ---
 
@@ -124,12 +92,6 @@ cat .trellis/spec/backend/logging-guidelines.md    # For logging
 |   \-- {MM}-{DD}-{name}/
 |       \-- task.json
 |-- spec/                # [!] MUST READ before coding
-|   |-- frontend/        # Frontend guidelines (if applicable)
-|   |   |-- index.md               # Start here - guidelines index
-|   |   \-- *.md                   # Topic-specific docs
-|   |-- backend/         # Backend guidelines (if applicable)
-|   |   |-- index.md               # Start here - guidelines index
-|   |   \-- *.md                   # Topic-specific docs
 |   \-- guides/          # Thinking guides
 |       |-- index.md                      # Guides index
 |       |-- cross-layer-thinking-guide.md # Pre-implementation checklist
@@ -158,24 +120,6 @@ Use the unified context script:
 **[!] CRITICAL: MUST read guidelines before writing any code**
 
 Based on what you'll develop, read the corresponding guidelines:
-
-**Frontend Development** (if applicable):
-```bash
-# Read index first, then specific docs based on task
-cat .trellis/spec/frontend/index.md
-```
-
-**Backend Development** (if applicable):
-```bash
-# Read index first, then specific docs based on task
-cat .trellis/spec/backend/index.md
-```
-
-**Cross-Layer Features**:
-```bash
-# For features spanning multiple layers
-cat .trellis/spec/guides/cross-layer-thinking-guide.md
-```
 
 ### Step 3: Select Task to Develop
 
@@ -222,12 +166,6 @@ Use the task management script:
 - [OK] Lint checks pass (project-specific command)
 - [OK] Type checks pass (if applicable)
 - [OK] Manual feature testing passes
-
-**Project-specific checks**:
-- See `.trellis/spec/frontend/quality-guidelines.md` for frontend
-- See `.trellis/spec/backend/quality-guidelines.md` for backend
-
----
 
 ## Session End
 
@@ -286,12 +224,6 @@ workspace/
 **Structure** (Multi-doc format):
 ```
 spec/
-|-- frontend/           # Frontend docs (if applicable)
-|   |-- index.md        # Start here
-|   \-- *.md            # Topic-specific docs
-|-- backend/            # Backend docs (if applicable)
-|   |-- index.md        # Start here
-|   \-- *.md            # Topic-specific docs
 \-- guides/             # Thinking guides
     |-- index.md        # Start here
     \-- *.md            # Guide-specific docs
@@ -360,12 +292,6 @@ tasks/
 ## Quick Reference
 
 ### Must-read Before Development
-
-| Task Type | Must-read Document |
-|-----------|-------------------|
-| Frontend work | `frontend/index.md` → relevant docs |
-| Backend work | `backend/index.md` → relevant docs |
-| Cross-Layer Feature | `guides/cross-layer-thinking-guide.md` |
 
 ### Commit Convention
 
