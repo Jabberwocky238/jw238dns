@@ -98,9 +98,44 @@ func (f *Frontend) ReceiveQuery(ctx context.Context, query *dns.Msg) (*dns.Msg, 
 	}
 
 	for _, r := range records {
-		rr := buildRR(r)
-		if rr != nil {
-			resp.Answer = append(resp.Answer, rr)
+		// For A/AAAA records with multiple values, create one RR per IP
+		if (r.Type == types.RecordTypeA || r.Type == types.RecordTypeAAAA) && len(r.Value) > 1 {
+			for _, val := range r.Value {
+				singleRec := &types.DNSRecord{
+					Name:  r.Name,
+					Type:  r.Type,
+					TTL:   r.TTL,
+					Value: []string{val},
+				}
+				rr := buildRR(singleRec)
+				if rr != nil {
+					resp.Answer = append(resp.Answer, rr)
+				}
+			}
+		} else {
+			rr := buildRR(r)
+			if rr != nil {
+				resp.Answer = append(resp.Answer, rr)
+			}
+		}
+	}
+
+	// Add NS records to Authority section for better DNS compliance
+	// Extract zone from query domain
+	zone := extractZone(info.Domain)
+	if zone != "" {
+		nsRecords, nsErr := f.backend.Resolve(ctx, &types.QueryInfo{
+			Domain: zone,
+			Type:   dns.TypeNS,
+			Class:  dns.ClassINET,
+		})
+		if nsErr == nil {
+			for _, r := range nsRecords {
+				rr := buildRR(r)
+				if rr != nil {
+					resp.Ns = append(resp.Ns, rr)
+				}
+			}
 		}
 	}
 
@@ -134,6 +169,28 @@ func (f *Frontend) ParseQuery(query *dns.Msg) (*types.QueryInfo, error) {
 		Type:   q.Qtype,
 		Class:  q.Qclass,
 	}, nil
+}
+
+// extractZone extracts the zone (base domain) from a fully qualified domain name.
+// For example: test.mesh-worker.cloud. -> mesh-worker.cloud.
+// This is a simple implementation that assumes the zone is the last two labels.
+func extractZone(domain string) string {
+	if domain == "" || domain == "." {
+		return ""
+	}
+
+	// Remove trailing dot if present
+	domain = strings.TrimSuffix(domain, ".")
+
+	// Split by dots
+	labels := strings.Split(domain, ".")
+	if len(labels) < 2 {
+		return domain + "."
+	}
+
+	// Return last two labels as zone (e.g., mesh-worker.cloud)
+	zone := labels[len(labels)-2] + "." + labels[len(labels)-1] + "."
+	return zone
 }
 
 // buildRR converts a DNSRecord into a dns.RR suitable for a response message.

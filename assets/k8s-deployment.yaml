@@ -20,42 +20,35 @@ data:
   config.yaml: |
     records:
       # SOA record - required for authoritative DNS server
-      - name: "mesh-worker.com."
+      - name: "mesh-worker.cloud."
         type: SOA
         ttl: 3600
         value:
-          - "ns1.mesh-worker.com. admin.mesh-worker.com. 2026021201 3600 1800 604800 86400"
+          - "ns1.app238.com. admin.mesh-worker.cloud. 2026021201 3600 1800 604800 86400"
 
       # NS records - nameservers for the domain
-      - name: "mesh-worker.com."
+      - name: "mesh-worker.cloud."
         type: NS
         ttl: 3600
         value:
-          - "ns1.mesh-worker.com."
-          - "ns2.mesh-worker.com."
-          - "ns3.mesh-worker.com."
+          - "ns1.app238.com."
+          - "ns2.app238.com."
 
-      # A records for nameservers
-      - name: "ns1.mesh-worker.com."
+      # A records for nameservers (under app238.com domain)
+      - name: "ns1.app238.com."
         type: A
         ttl: 3600
         value:
           - 170.106.143.75
 
-      - name: "ns2.mesh-worker.com."
+      - name: "ns2.app238.com."
         type: A
         ttl: 3600
         value:
           - 163.245.215.17
 
-      - name: "ns3.mesh-worker.com."
-        type: A
-        ttl: 3600
-        value:
-          - 101.32.181.225
-
       # Wildcard A record
-      - name: "*.mesh-worker.com."
+      - name: "*.mesh-worker.cloud."
         type: A
         ttl: 600
         value:
@@ -211,6 +204,7 @@ spec:
     spec:
       serviceAccountName: jw238dns
       affinity:
+        # Node affinity - schedule on nodes with tag=ingress
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
@@ -219,6 +213,18 @@ spec:
                     operator: In
                     values:
                       - ingress
+        # Pod anti-affinity - spread pods across different nodes
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - jw238dns
+                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
