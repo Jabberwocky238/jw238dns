@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"log/slog"
+	"regexp"
+	"strings"
 	"sync"
 
 	"jabberwocky238/jw238dns/types"
@@ -25,24 +27,77 @@ func NewMemoryStorage() *MemoryStorage {
 }
 
 // Get returns all records matching the given name and type.
+// Supports wildcard matching: if exact match fails, tries wildcard patterns.
 func (s *MemoryStorage) Get(_ context.Context, name string, recordType types.RecordType) ([]*types.DNSRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	// Try exact match first
 	byType, ok := s.records[name]
-	if !ok {
-		return nil, types.ErrRecordNotFound
+	if ok {
+		recs, ok := byType[recordType]
+		if ok && len(recs) > 0 {
+			// Return a copy to avoid data races on the slice.
+			out := make([]*types.DNSRecord, len(recs))
+			copy(out, recs)
+			return out, nil
+		}
 	}
 
-	recs, ok := byType[recordType]
-	if !ok || len(recs) == 0 {
-		return nil, types.ErrRecordNotFound
+	// Try wildcard match: *.example.com matches test.example.com
+	recs := s.matchWildcard(name, recordType)
+	if len(recs) > 0 {
+		return recs, nil
 	}
 
-	// Return a copy to avoid data races on the slice.
-	out := make([]*types.DNSRecord, len(recs))
-	copy(out, recs)
-	return out, nil
+	return nil, types.ErrRecordNotFound
+}
+
+// matchWildcard attempts to find a wildcard record matching the given name.
+// For example, *.example.com. matches test.example.com.
+func (s *MemoryStorage) matchWildcard(name string, recordType types.RecordType) []*types.DNSRecord {
+	// Try all stored wildcard patterns
+	for storedName, byType := range s.records {
+		if !strings.HasPrefix(storedName, "*.") {
+			continue // Not a wildcard pattern
+		}
+
+		// Convert wildcard pattern to regex
+		// *.example.com. -> ^[^.]+\.example\.com\.$
+		pattern := wildcardToRegex(storedName)
+		matched, err := regexp.MatchString(pattern, name)
+		if err != nil || !matched {
+			continue
+		}
+
+		// Found matching wildcard
+		recs, ok := byType[recordType]
+		if !ok || len(recs) == 0 {
+			continue
+		}
+
+		// Return a copy
+		out := make([]*types.DNSRecord, len(recs))
+		copy(out, recs)
+		return out
+	}
+
+	return nil
+}
+
+// wildcardToRegex converts a DNS wildcard pattern to a regex pattern.
+// Supports multiple wildcards in a pattern.
+// Examples:
+//   *.example.com. -> ^[^.]+\.example\.com\.$
+//   *.*.app.com. -> ^[^.]+\.[^.]+\.app\.com\.$
+//   test.*.com. -> ^test\.[^.]+\.com\.$
+func wildcardToRegex(wildcard string) string {
+	// Escape all regex special characters except *
+	escaped := regexp.QuoteMeta(wildcard)
+	// Replace all escaped \* with pattern that matches one label
+	// [^.]+ matches one or more characters that are not dots (one DNS label)
+	pattern := strings.ReplaceAll(escaped, `\*`, `[^.]+`)
+	return "^" + pattern + "$"
 }
 
 // List returns all stored DNS records.
