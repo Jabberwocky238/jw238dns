@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-acme/lego/v4/certificate"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -56,14 +55,18 @@ func (s *KubernetesSecretStorage) Store(ctx context.Context, domain string, cert
 		},
 	}
 
-	// Try to create, if exists then update
-	_, err := s.client.CoreV1().Secrets(s.namespace).Create(ctx, secret, metav1.CreateOptions{})
+	// Try to get existing secret first
+	existing, err := s.client.CoreV1().Secrets(s.namespace).Get(ctx, secret.Name, metav1.GetOptions{})
 	if err != nil {
-		// Check if error is "already exists"
-		if !apierrors.IsAlreadyExists(err) {
+		// Secret doesn't exist, create it
+		_, err = s.client.CoreV1().Secrets(s.namespace).Create(ctx, secret, metav1.CreateOptions{})
+		if err != nil {
 			return fmt.Errorf("failed to create secret: %w", err)
 		}
-		// If already exists, update it
+	} else {
+		// Secret exists, update it
+		// Preserve ResourceVersion for optimistic concurrency control
+		secret.ResourceVersion = existing.ResourceVersion
 		_, err = s.client.CoreV1().Secrets(s.namespace).Update(ctx, secret, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to update secret: %w", err)
@@ -187,9 +190,10 @@ func (s *FileStorage) Delete(ctx context.Context, domain string) error {
 // domainToK8sSecret converts a domain name to a Kubernetes Secret name.
 // Uses the tls-- prefix convention for TLS certificates.
 // Examples:
-//   *.mesh-worker.cloud    → tls--mesh-worker-cloud
-//   mesh-worker.cloud      → tls--mesh-worker-cloud
-//   api.mesh-worker.cloud  → tls--mesh-worker-cloud
+//
+//	*.mesh-worker.cloud    → tls--mesh-worker-cloud
+//	mesh-worker.cloud      → tls--mesh-worker-cloud
+//	api.mesh-worker.cloud  → tls--mesh-worker-cloud
 func domainToK8sSecret(domain string) string {
 	return fmt.Sprintf("tls--%s", sanitizeDomain(domain))
 }
@@ -197,10 +201,11 @@ func domainToK8sSecret(domain string) string {
 // sanitizeDomain converts a domain name to a safe file/secret name.
 // Extracts the root domain (apex domain) and converts dots to hyphens.
 // Examples:
-//   *.mesh-worker.cloud    → mesh-worker-cloud
-//   mesh-worker.cloud      → mesh-worker-cloud
-//   api.mesh-worker.cloud  → mesh-worker-cloud
-//   v1.api.example.com     → example-com
+//
+//	*.mesh-worker.cloud    → mesh-worker-cloud
+//	mesh-worker.cloud      → mesh-worker-cloud
+//	api.mesh-worker.cloud  → mesh-worker-cloud
+//	v1.api.example.com     → example-com
 func sanitizeDomain(domain string) string {
 	// Remove wildcard prefix if present
 	domain = strings.TrimPrefix(domain, "*.")
