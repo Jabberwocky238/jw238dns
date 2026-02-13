@@ -36,7 +36,7 @@ func NewKubernetesSecretStorage(client kubernetes.Interface, namespace string) *
 
 // Store saves a certificate to a Kubernetes Secret.
 func (s *KubernetesSecretStorage) Store(ctx context.Context, domain string, cert *certificate.Resource) error {
-	secretName := fmt.Sprintf("tls-%s", sanitizeDomain(domain))
+	secretName := domainToK8sSecret(domain)
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -70,7 +70,7 @@ func (s *KubernetesSecretStorage) Store(ctx context.Context, domain string, cert
 
 // Load retrieves a certificate from a Kubernetes Secret.
 func (s *KubernetesSecretStorage) Load(ctx context.Context, domain string) (*certificate.Resource, error) {
-	secretName := fmt.Sprintf("tls-%s", sanitizeDomain(domain))
+	secretName := domainToK8sSecret(domain)
 
 	secret, err := s.client.CoreV1().Secrets(s.namespace).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
@@ -87,7 +87,7 @@ func (s *KubernetesSecretStorage) Load(ctx context.Context, domain string) (*cer
 
 // Delete removes a certificate from Kubernetes Secret.
 func (s *KubernetesSecretStorage) Delete(ctx context.Context, domain string) error {
-	secretName := fmt.Sprintf("tls-%s", sanitizeDomain(domain))
+	secretName := domainToK8sSecret(domain)
 
 	err := s.client.CoreV1().Secrets(s.namespace).Delete(ctx, secretName, metav1.DeleteOptions{})
 	if err != nil {
@@ -177,6 +177,16 @@ func (s *FileStorage) Delete(ctx context.Context, domain string) error {
 	}
 
 	return nil
+}
+
+// domainToK8sSecret converts a domain name to a Kubernetes Secret name.
+// Uses the tls-- prefix convention for TLS certificates.
+// Examples:
+//   *.mesh-worker.cloud    → tls--mesh-worker-cloud
+//   mesh-worker.cloud      → tls--mesh-worker-cloud
+//   api.mesh-worker.cloud  → tls--mesh-worker-cloud
+func domainToK8sSecret(domain string) string {
+	return fmt.Sprintf("tls--%s", sanitizeDomain(domain))
 }
 
 // sanitizeDomain converts a domain name to a safe file/secret name.

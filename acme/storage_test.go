@@ -2,7 +2,6 @@ package acme
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -338,7 +337,7 @@ func TestSanitizeDomain(t *testing.T) {
 			}
 
 			// Verify secret name format
-			secretName := fmt.Sprintf("tls--%s", got)
+			secretName := domainToK8sSecret(tt.domain)
 			t.Logf("Domain: %s → Secret: %s", tt.domain, secretName)
 		})
 	}
