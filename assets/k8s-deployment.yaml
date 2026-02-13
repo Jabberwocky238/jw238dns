@@ -91,7 +91,7 @@ data:
   app.yaml: |
     dns:
       listen: "0.0.0.0:53"
-      tcp_enabled: false
+      tcp_enabled: true
       udp_enabled: true
       upstream:
         enabled: true
@@ -116,20 +116,7 @@ data:
       listen: "0.0.0.0:8080"
       auth:
         enabled: true
-        token_env: "HTTP_AUTH_TOKEN"
-
-    acme:
-      enabled: true
-      mode: "zerossl"
-      email: "shadowsocks1984@gmail.com"
-      # EAB credentials (required for ZeroSSL, ignored for Let's Encrypt)
-      eab:
-        kid_env: "ACME_EAB_KID"
-        hmac_env: "ACME_EAB_HMAC"
-      auto_renew: true
-      storage:
-        type: "kubernetes-secret"
-        namespace: "jw238dns"
+        token_env: "DNS_HTTP_AUTH_TOKEN"
 
 ---
 # Secret for authentication
@@ -142,10 +129,7 @@ metadata:
     app: jw238dns
 type: Opaque
 stringData:
-  http-token: "change-me-to-a-secure-random-token"
-  acme-email: "shadowsocks1984@gmail.com"
-  acme-eab-kid: "${ZEROSSL_EAB_KID}"
-  acme-eab-hmac: "${ZEROSSL_EAB_HMAC_KEY}"
+  http-token: "${DNS_HTTP_AUTH_TOKEN}"
 
 ---
 # ServiceAccount
@@ -171,10 +155,6 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "watch", "update", "patch"]
-  # Secret access for certificates
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
 
 ---
 # RoleBinding
@@ -241,6 +221,9 @@ spec:
             - name: dns-udp
               containerPort: 53
               protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
             - name: http
               containerPort: 8080
               protocol: TCP
@@ -253,6 +236,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            # HTTP authentication token
+            - name: DNS_HTTP_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: http-token
           volumeMounts:
             - name: config
               mountPath: /app/config
@@ -314,6 +303,10 @@ spec:
       port: 53
       targetPort: dns-udp
       protocol: UDP
+    - name: dns-tcp
+      port: 53
+      targetPort: dns-tcp
+      protocol: TCP
     - name: http
       port: 8080
       targetPort: http

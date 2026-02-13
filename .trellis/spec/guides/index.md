@@ -18,8 +18,8 @@ This document defines the development standards for the jw238dns cloud-native DN
 - **Language**: Go 1.21+
 - **Deployment**: Kubernetes (cloud-native, runs in-cluster)
 - **Configuration**: ConfigMap persistence
-- **Protocols**: DNS, HTTP, ACME (DNS-01, HTTP-01)
-- **Cert-Manager**: Compatible with cert-manager for certificate automation
+- **Protocols**: DNS, HTTP
+- **Certificate Management**: Delegated to control plane (not handled by this service)
 
 ## Project Structure
 
@@ -47,13 +47,6 @@ jw238dns/
 │   │   ├── memory_test.go
 │   │   └── reload.go      # Hot reload logic
 │   │       └── reload_test.go
-│   ├── acme/              # ACME challenge handlers
-│   │   ├── dns01.go       # DNS-01 challenge
-│   │   ├── dns01_test.go
-│   │   ├── http01.go      # HTTP-01 challenge
-│   │   ├── http01_test.go
-│   │   ├── webhook.go     # Cert-manager webhook
-│   │   └── webhook_test.go
 │   ├── api/               # HTTP management API
 │   │   ├── server.go      # HTTP server
 │   │   ├── server_test.go
@@ -77,8 +70,7 @@ jw238dns/
 │       ├── deployment.yaml
 │       ├── service.yaml
 │       ├── configmap.yaml
-│       ├── rbac.yaml
-│       └── webhook.yaml   # Cert-manager webhook config
+│       └── rbac.yaml
 ├── test/
 │   ├── integration/       # Integration tests
 │   └── e2e/               # End-to-end tests
@@ -139,6 +131,61 @@ func main() {
     slog.Info("shutting down...")
 }
 ```
+
+## Kubernetes Naming Constraints
+
+### DNS-1123 Subdomain Rules
+
+When creating Kubernetes resources (Secrets, ConfigMaps, Services, etc.), names must follow DNS-1123 subdomain rules:
+
+**Allowed**:
+- Lowercase alphanumeric characters: `a-z`, `0-9`
+- Hyphens: `-`
+- Dots: `.` (for some resources)
+
+**Not Allowed**:
+- Underscores: `_`
+- Uppercase letters
+- Special characters
+
+**Length Limits**:
+- Maximum 253 characters
+- Must start and end with alphanumeric character
+
+**Example Error**:
+```
+Secret "tls-wildcard--__mesh-worker_cloud" is invalid:
+metadata.name: Invalid value: "tls-wildcard--__mesh-worker_cloud":
+a lowercase RFC 1123 subdomain must consist of lower case alphanumeric
+characters, '-' or '.', and must start and end with an alphanumeric character
+```
+
+**Common Mistakes**:
+
+1. ❌ Using underscores in generated names:
+   ```go
+   // Bad: generates names with underscores
+   secretName := "tls-" + strings.ReplaceAll(domain, ".", "_")
+   // Result: "tls-example_com" (invalid!)
+   ```
+
+2. ✅ Use hyphens instead:
+   ```go
+   // Good: use hyphens
+   secretName := "tls-" + strings.ReplaceAll(domain, ".", "-")
+   // Result: "tls-example-com" (valid)
+   ```
+
+**Domain-to-Resource Name Mapping Challenges**:
+
+When mapping domain names to Kubernetes resource names, be aware of these challenges:
+
+1. **Domains can contain hyphens**: `mesh-worker.cloud`
+2. **Bidirectional mapping is complex**: Hard to distinguish between hyphens that represent dots vs. original hyphens
+3. **International domains**: Punycode adds complexity
+4. **Wildcard certificates**: `*.example.com` needs special handling
+
+**Recommendation**: For complex naming schemes (like certificate management), consider delegating to specialized control plane components (cert-manager, external-dns) rather than implementing custom mapping logic.
 
 ## Kubernetes Deployment Requirements
 
@@ -205,118 +252,6 @@ roleRef:
   kind: Role
   name: jw238dns
   apiGroup: rbac.authorization.k8s.io
-```
-
-## ACME Challenge Support
-
-### HTTP-01 Challenge
-
-**Requirements**:
-1. HTTP server listens on port 80 (or configurable)
-2. Serve challenges at `/.well-known/acme-challenge/:token`
-3. Support cert-manager HTTP-01 solver
-
-```go
-// HTTP-01 handler
-func (h *HTTP01Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    if !strings.HasPrefix(r.URL.Path, "/.well-known/acme-challenge/") {
-        http.NotFound(w, r)
-        return
-    }
-
-    token := strings.TrimPrefix(r.URL.Path, "/.well-known/acme-challenge/")
-
-    if keyAuth, ok := h.challenges.Load(token); ok {
-        w.Header().Set("Content-Type", "text/plain")
-        w.Write([]byte(keyAuth.(string)))
-        return
-    }
-
-    http.NotFound(w, r)
-}
-```
-
-### DNS-01 Challenge
-
-**Requirements**:
-1. Create TXT records for `_acme-challenge` subdomain
-2. Support cert-manager DNS-01 solver
-3. Implement cert-manager webhook interface
-
-```go
-// DNS-01 handler
-func (h *DNS01Handler) SetChallenge(ctx context.Context, domain, token string) error {
-    record := &types.DNSRecord{
-        Name:  fmt.Sprintf("_acme-challenge.%s", domain),
-        Type:  types.RecordTypeTXT,
-        TTL:   60,
-        Value: []string{token},
-    }
-
-    return h.storage.Create(ctx, record)
-}
-```
-
-### Cert-Manager Webhook
-
-**Implement cert-manager webhook interface**:
-
-```go
-// Webhook server for cert-manager
-type CertManagerWebhook struct {
-    storage storage.CoreStorage
-}
-
-// Present creates the DNS record for the challenge
-func (w *CertManagerWebhook) Present(ctx context.Context, ch *v1alpha1.ChallengeRequest) error {
-    record := &types.DNSRecord{
-        Name:  ch.ResolvedFQDN,
-        Type:  types.RecordTypeTXT,
-        TTL:   60,
-        Value: []string{ch.Key},
-    }
-
-    return w.storage.Create(ctx, record)
-}
-
-// CleanUp removes the DNS record after validation
-func (w *CertManagerWebhook) CleanUp(ctx context.Context, ch *v1alpha1.ChallengeRequest) error {
-    return w.storage.Delete(ctx, ch.ResolvedFQDN, types.RecordTypeTXT)
-}
-```
-
-**Webhook Deployment**:
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: jw238dns-webhook
-  namespace: cert-manager
-spec:
-  ports:
-    - port: 443
-      targetPort: 8443
-      protocol: TCP
-  selector:
-    app: jw238dns
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: letsencrypt
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: letsencrypt-key
-    solvers:
-      - dns01:
-          webhook:
-            groupName: acme.jw238dns.io
-            solverName: jw238dns
-            config:
-              apiUrl: http://jw238dns.default.svc.cluster.local:8080
 ```
 
 ## Coding Standards
@@ -513,6 +448,50 @@ func TestMemoryStorage_Create(t *testing.T) {
 2. **Connection Pooling**: Reuse connections where possible
 3. **Goroutines**: Use goroutines for concurrent request handling
 4. **Resource Limits**: Set appropriate memory and CPU limits
+
+## Architecture Decisions
+
+### Separation of Concerns: When to Delegate to Control Plane
+
+**Principle**: Not all functionality should be implemented in every component. Some features are better handled by specialized control plane components.
+
+**When to Delegate**:
+
+1. **Certificate Management**
+   - ❌ Don't: Implement ACME protocol in DNS service
+   - ✅ Do: Use cert-manager or external certificate management
+   - **Why**: Certificate management involves complex state management, renewal logic, and multiple CA integrations. Specialized tools handle this better.
+
+2. **Complex Resource Naming/Mapping**
+   - ❌ Don't: Implement bidirectional domain-to-resource name mapping with edge cases
+   - ✅ Do: Use standard naming conventions or delegate to control plane
+   - **Why**: Edge cases (domains with hyphens, international domains, wildcards) make custom mapping schemes fragile and hard to maintain.
+
+3. **Multi-Tenant Resource Management**
+   - ❌ Don't: Implement custom resource isolation and RBAC
+   - ✅ Do: Use Kubernetes native RBAC and namespace isolation
+   - **Why**: Kubernetes already provides robust multi-tenancy features.
+
+**Decision Criteria**:
+
+Ask these questions when considering adding a feature:
+
+1. **Complexity**: Does this feature have many edge cases or require complex state management?
+2. **Specialization**: Are there existing tools that specialize in this functionality?
+3. **Maintenance**: Will this feature require ongoing updates to handle new scenarios?
+4. **Scope**: Is this feature outside the core responsibility of this service?
+
+If you answer "yes" to 2 or more questions, consider delegating to control plane or specialized components.
+
+**Example from this project**:
+
+We initially attempted to implement ACME certificate management with domain-to-Secret name mapping. We discovered:
+- Kubernetes DNS-1123 naming rules are restrictive (no underscores)
+- Bidirectional mapping is complex (domains can contain hyphens)
+- International domains (Punycode) add more complexity
+- Certificate renewal, storage, and CA integration require significant code
+
+**Decision**: Remove ACME implementation, delegate to cert-manager. This simplified the codebase and leveraged a mature, well-tested solution.
 
 ## Documentation Requirements
 

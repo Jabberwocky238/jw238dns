@@ -26,13 +26,21 @@ func AuthMiddleware(token string) gin.HandlerFunc {
 }
 
 // LoggingMiddleware logs each HTTP request with method, path, status, and latency.
+// Health check requests are not logged to reduce noise.
 func LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
+		path := c.Request.URL.Path
 		c.Next()
+
+		// Skip logging for health check endpoint
+		if path == "/health" {
+			return
+		}
+
 		slog.Info("http request",
 			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
+			"path", path,
 			"status", c.Writer.Status(),
 			"latency", time.Since(start).String(),
 			"client", c.ClientIP(),

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 15
 - **Last Active**: 2026-02-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~487 | Active |
+| `journal-1.md` | ~1402 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,13 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 15 | 2026-02-13 | Remove ACME implementation, delegate to control plane | `7305573` |
+| 14 | 2026-02-13 | 实现域名到 Secret 的双向映射系统 | `f645a53`, `82bb73b` |
+| 13 | 2026-02-13 | Refactor ACME configuration and fix Secret naming | `7f310db`, `44f0a2a` |
+| 12 | 2026-02-13 | Fix ACME DNS-01 validation and TXT record handling | `25f0697`, `00446a6` |
+| 11 | 2026-02-13 | Fix ACME DNS validation and unify certificate naming | `d9964b8` |
+| 10 | 2026-02-13 | Fix ACME multi-domain DNS-01 validation and improve logging | `1e7cf93`, `02c71d9` |
+| 9 | 2026-02-13 | Update ACME configuration and simplify TLS architecture | `e8fcf76` |
 | 8 | 2026-02-13 | Add comprehensive documentation | `01a35f3` |
 | 7 | 2026-02-13 | Implement HTTP management API | `2b4c88f` |
 | 6 | 2026-02-13 | Complete upstream DNS forwarding and ACME EAB support | `e814a19` |

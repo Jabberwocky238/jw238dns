@@ -1,0 +1,99 @@
+---
+# Complete mesh-worker.cloud setup with TLS
+#
+# This file contains:
+# 1. Traefik IngressRoute with TLS (in jw238dns namespace)
+# 2. Cross-namespace service reference to worker namespace
+# 3. Optional HTTP to HTTPS redirect
+#
+# Prerequisites:
+# - jw238dns deployed with ACME enabled
+# - ZeroSSL EAB credentials in jw238dns-auth secret
+# - Traefik installed as ingress controller
+# - worker namespace exists with w-9bee9648-jabber979114 service
+#
+# Deploy:
+# kubectl apply -f k8s-mesh-worker-tls.yaml
+#
+# Note: Certificate and IngressRoute are in jw238dns namespace,
+#       but route to service in worker namespace (cross-namespace reference)
+#
+
+---
+# Traefik IngressRoute for apex domain (mesh-worker.cloud)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mesh-worker-apex-https
+  namespace: jw238dns
+spec:
+  entryPoints:
+    - websecure  # HTTPS (port 443)
+  routes:
+    # Apex domain only
+    - match: Host(`mesh-worker.cloud`)
+      kind: Rule
+      services:
+        - name: w-9bee9648-jabber979114
+          port: 10086
+          namespace: worker  # Cross-namespace service reference
+
+  tls:
+    # Certificate for apex domain (mesh-worker.cloud)
+    secretName: tls-normal--mesh-worker-cloud
+
+---
+# Traefik IngressRoute for subdomains (*.mesh-worker.cloud)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mesh-worker-wildcard-https
+  namespace: jw238dns
+spec:
+  entryPoints:
+    - websecure  # HTTPS (port 443)
+  routes:
+    # All subdomains (including multi-level)
+    - match: HostRegexp(`{subdomain:.+}.mesh-worker.cloud`)
+      kind: Rule
+      services:
+        - name: w-9bee9648-jabber979114
+          port: 10086
+          namespace: worker  # Cross-namespace service reference
+
+  tls:
+    # Certificate for wildcard subdomains (*.mesh-worker.cloud)
+    secretName: tls-wildcard-----mesh-worker--cloud
+
+---
+# Optional: HTTP to HTTPS redirect
+# Uncomment to enable automatic HTTPS redirect
+#
+# apiVersion: traefik.io/v1alpha1
+# kind: Middleware
+# metadata:
+#   name: https-redirect
+#   namespace: jw238dns
+# spec:
+#   redirectScheme:
+#     scheme: https
+#     permanent: true
+#
+# ---
+# apiVersion: traefik.io/v1alpha1
+# kind: IngressRoute
+# metadata:
+#   name: mesh-worker-http
+#   namespace: jw238dns
+# spec:
+#   entryPoints:
+#     - web  # HTTP (port 80)
+#   routes:
+#     - match: Host(`mesh-worker.cloud`) || HostRegexp(`{subdomain:.+}.mesh-worker.cloud`)
+#       kind: Rule
+#       middlewares:
+#         - name: https-redirect
+#       services:
+#         - name: w-9bee9648-jabber979114
+#           port: 10086
+#           namespace: worker

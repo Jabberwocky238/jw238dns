@@ -47,6 +47,10 @@ func (s *MemoryStorage) Get(_ context.Context, name string, recordType types.Rec
 	// Try wildcard match: *.example.com matches test.example.com
 	recs := s.matchWildcard(name, recordType)
 	if len(recs) > 0 {
+		// Replace wildcard name with actual queried name
+		for _, rec := range recs {
+			rec.Name = name
+		}
 		return recs, nil
 	}
 

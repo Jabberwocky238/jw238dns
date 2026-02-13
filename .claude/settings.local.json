@@ -25,7 +25,8 @@
       "Bash(dir:*)",
       "Bash(nslookup:*)",
       "Bash(dig:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(curl:*)"
     ]
   }
 }

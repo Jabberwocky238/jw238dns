@@ -69,44 +69,7 @@ http:
 
     # Environment variable containing the auth token
     # The actual token value is read from this env var at runtime
-    token_env: "HTTP_AUTH_TOKEN"
-
-# ACME Certificate Management Configuration
-acme:
-  # Enable ACME certificate management
-  enabled: true
-
-  # ACME provider mode: "letsencrypt" or "zerossl"
-  # This automatically sets the correct server URL
-  mode: "letsencrypt"
-
-  # Or specify server URL directly (overrides mode)
-  # server: "https://acme-v02.api.letsencrypt.org/directory"
-
-  # Email for ACME account registration
-  email: "admin@example.com"
-
-  # External Account Binding (required for ZeroSSL, optional for Let's Encrypt)
-  eab:
-    # Environment variable containing EAB Key ID
-    kid_env: "ACME_EAB_KID"
-
-    # Environment variable containing EAB HMAC key
-    hmac_env: "ACME_EAB_HMAC"
-
-  # Enable automatic certificate renewal
-  auto_renew: true
-
-  # Certificate storage settings
-  storage:
-    # Storage type: "kubernetes-secret" or "file"
-    type: "kubernetes-secret"
-
-    # Kubernetes namespace for certificate secrets
-    namespace: "jw238dns"
-
-    # File path for certificate storage (if type is "file")
-    path: "/app/certs"
+    token_env: "DNS_HTTP_AUTH_TOKEN"
 ```
 
 ---
@@ -139,10 +102,7 @@ http:
   listen: "127.0.0.1:8080"
   auth:
     enabled: true
-    token_env: "HTTP_AUTH_TOKEN"
-
-acme:
-  enabled: false  # Disable ACME in development
+    token_env: "DNS_HTTP_AUTH_TOKEN"
 ```
 
 ### Production (Kubernetes)
@@ -175,64 +135,7 @@ http:
   listen: "0.0.0.0:8080"
   auth:
     enabled: true
-    token_env: "HTTP_AUTH_TOKEN"
-
-acme:
-  enabled: true
-  mode: "letsencrypt"
-  email: "admin@example.com"
-  eab:
-    kid_env: "ACME_EAB_KID"
-    hmac_env: "ACME_EAB_HMAC"
-  auto_renew: true
-  storage:
-    type: "kubernetes-secret"
-    namespace: "jw238dns"
-```
-
-### Production with ZeroSSL
-
-```yaml
-dns:
-  listen: "0.0.0.0:53"
-  tcp_enabled: true
-  udp_enabled: true
-  upstream:
-    enabled: true
-    servers:
-      - "1.1.1.1:53"
-      - "8.8.8.8:53"
-    timeout: "5s"
-
-geoip:
-  enabled: true
-  mmdb_path: "/app/assets/GeoLite2-City.mmdb"
-
-storage:
-  type: "configmap"
-  configmap:
-    namespace: "jw238dns"
-    name: "jw238dns-records"
-    data_key: "records.yaml"
-
-http:
-  enabled: true
-  listen: "0.0.0.0:8080"
-  auth:
-    enabled: true
-    token_env: "HTTP_AUTH_TOKEN"
-
-acme:
-  enabled: true
-  mode: "zerossl"  # Use ZeroSSL instead of Let's Encrypt
-  email: "admin@example.com"
-  eab:
-    kid_env: "ACME_EAB_KID"      # Required for ZeroSSL
-    hmac_env: "ACME_EAB_HMAC"    # Required for ZeroSSL
-  auto_renew: true
-  storage:
-    type: "kubernetes-secret"
-    namespace: "jw238dns"
+    token_env: "DNS_HTTP_AUTH_TOKEN"
 ```
 
 ---
@@ -252,15 +155,7 @@ CONFIG_PATH="/app/config/app.yaml"
 
 ```bash
 # HTTP API authentication token
-HTTP_AUTH_TOKEN="your-secret-token-here"
-```
-
-### Optional (ACME with ZeroSSL)
-
-```bash
-# ZeroSSL EAB credentials (required for ZeroSSL)
-ACME_EAB_KID="your-eab-key-id"
-ACME_EAB_HMAC="your-eab-hmac-key"
+DNS_HTTP_AUTH_TOKEN="your-secret-token-here"
 ```
 
 ---
@@ -303,54 +198,6 @@ ACME_EAB_HMAC="your-eab-hmac-key"
 | `listen` | string | `"0.0.0.0:8080"` | HTTP server listen address |
 | `auth.enabled` | bool | `false` | Enable authentication |
 | `auth.token_env` | string | `""` | Env var containing auth token |
-
-### ACME Section
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enabled` | bool | `false` | Enable ACME certificate management |
-| `mode` | string | `"letsencrypt"` | ACME provider: `letsencrypt` or `zerossl` |
-| `server` | string | `""` | ACME server URL (overrides mode) |
-| `email` | string | `""` | Email for ACME account |
-| `eab.kid_env` | string | `""` | Env var for EAB Key ID |
-| `eab.hmac_env` | string | `""` | Env var for EAB HMAC key |
-| `auto_renew` | bool | `true` | Enable automatic renewal |
-| `storage.type` | string | `"kubernetes-secret"` | Storage type |
-| `storage.namespace` | string | `"default"` | Kubernetes namespace |
-| `storage.path` | string | `""` | File path for certificates |
-
----
-
-## ACME Provider URLs
-
-### Let's Encrypt
-
-**Production:**
-```yaml
-acme:
-  mode: "letsencrypt"
-  # Or explicitly:
-  # server: "https://acme-v02.api.letsencrypt.org/directory"
-```
-
-**Staging (for testing):**
-```yaml
-acme:
-  server: "https://acme-staging-v02.api.letsencrypt.org/directory"
-```
-
-### ZeroSSL
-
-**Production:**
-```yaml
-acme:
-  mode: "zerossl"
-  # Or explicitly:
-  # server: "https://acme.zerossl.com/v2/DV90"
-  eab:
-    kid_env: "ACME_EAB_KID"
-    hmac_env: "ACME_EAB_HMAC"
-```
 
 ---
 
@@ -422,10 +269,10 @@ dns:
 **Check authentication:**
 ```bash
 # Verify token is set
-echo $HTTP_AUTH_TOKEN
+echo $DNS_HTTP_AUTH_TOKEN
 
 # Test with correct token
-curl -H "Authorization: Bearer $HTTP_AUTH_TOKEN" http://localhost:8080/dns/list
+curl -H "Authorization: Bearer $DNS_HTTP_AUTH_TOKEN" http://localhost:8080/dns/list
 ```
 
 ### Upstream DNS Not Working
@@ -439,19 +286,6 @@ dig @1.1.1.1 example.com
 dns:
   upstream:
     timeout: "10s"  # Increase if needed
-```
-
-### ACME Certificate Fails
-
-**Check EAB credentials (ZeroSSL):**
-```bash
-# Verify EAB variables are set
-echo $ACME_EAB_KID
-echo $ACME_EAB_HMAC
-
-# Use staging for testing
-acme:
-  server: "https://acme-staging-v02.api.letsencrypt.org/directory"
 ```
 
 ---
