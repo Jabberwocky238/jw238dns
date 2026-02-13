@@ -120,15 +120,7 @@ data:
 
     acme:
       enabled: true
-      # Mode: "letsencrypt" or "zerossl"
-      # - letsencrypt: uses Let's Encrypt (no EAB required)
-      # - zerossl: uses ZeroSSL (EAB required)
       mode: "zerossl"
-      # Server URL is set based on mode:
-      # - letsencrypt -> https://acme-v02.api.letsencrypt.org/directory
-      # - zerossl -> https://acme.zerossl.com/v2/DV90
-      # Override with explicit server URL if needed:
-      # server: "https://acme.zerossl.com/v2/DV90"
       email: "shadowsocks1984@gmail.com"
       # EAB credentials (required for ZeroSSL, ignored for Let's Encrypt)
       eab:
@@ -249,6 +241,9 @@ spec:
             - name: dns-udp
               containerPort: 53
               protocol: UDP
+            - name: http
+              containerPort: 8080
+              protocol: TCP
           env:
             - name: POD_NAME
               valueFrom:
@@ -272,19 +267,21 @@ spec:
               cpu: 500m
               memory: 512Mi
           readinessProbe:
-            tcpSocket:
-              port: 53
+            httpGet:
+              path: /health
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
             successThreshold: 1
             failureThreshold: 2
           livenessProbe:
-            tcpSocket:
-              port: 53
+            httpGet:
+              path: /health
+              port: http
             initialDelaySeconds: 15
             periodSeconds: 20
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 3
           securityContext:
             allowPrivilegeEscalation: false
@@ -302,23 +299,24 @@ spec:
           emptyDir: {}
 
 ---
-# Service for DNS (UDP)
+# ClusterIP Service for internal access
 apiVersion: v1
 kind: Service
 metadata:
-  name: jw238dns-dns-udp
+  name: jw238dns
   namespace: jw238dns
   labels:
     app: jw238dns
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
 spec:
-  type: LoadBalancer
-  externalTrafficPolicy: Local
+  type: ClusterIP
   ports:
     - name: dns-udp
       port: 53
       targetPort: dns-udp
       protocol: UDP
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
   selector:
     app: jw238dns
