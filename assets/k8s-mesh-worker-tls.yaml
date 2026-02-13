@@ -48,7 +48,7 @@ spec:
 
   tls:
     # Certificate created by jw238dns in same namespace
-    secretName: tls-wildcard-mesh-worker-cloud
+    secretName: tls--mesh-worker-cloud
 
 ---
 # Optional: HTTP to HTTPS redirect

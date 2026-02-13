@@ -18,6 +18,10 @@ import (
 	"github.com/go-acme/lego/v4/registration"
 )
 
+const (
+	ClusterDomain = "jw238dns.jw238dns.svc.cluster.local:53"
+)
+
 // Client wraps the lego ACME client with our configuration.
 type Client struct {
 	config      *Config
@@ -59,10 +63,10 @@ func NewClient(config *Config, store storage.CoreStorage) (*Client, error) {
 	dnsProvider.SetPropagationWait(config.PropagationWait)
 
 	// Set DNS-01 challenge provider with custom DNS servers
-	// Use public DNS servers (8.8.8.8, 1.1.1.1) instead of Kubernetes internal DNS
-	// to ensure ACME validation can query our DNS records
+	// Use jw238dns service for DNS-01 validation
+	// This allows ACME to query our own DNS server for _acme-challenge records
 	if err := legoClient.Challenge.SetDNS01Provider(dnsProvider,
-		dns01.AddRecursiveNameservers([]string{"1.1.1.1:53", "8.8.8.8:53"}),
+		dns01.AddRecursiveNameservers([]string{ClusterDomain}),
 	); err != nil {
 		return nil, fmt.Errorf("failed to set DNS-01 provider: %w", err)
 	}
