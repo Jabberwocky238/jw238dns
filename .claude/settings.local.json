@@ -24,7 +24,8 @@
       "Bash(ls:*)",
       "Bash(dir:*)",
       "Bash(nslookup:*)",
-      "Bash(dig:*)"
+      "Bash(dig:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
