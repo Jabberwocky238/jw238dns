@@ -466,21 +466,21 @@ func (c *ACMEConfig) ToACMEConfig() *acme.Config {
 	}
 
 	// Parse duration strings with defaults
-	checkInterval := 24 * time.Hour
+	checkInterval := acme.DefaultCheckInterval
 	if c.CheckInterval != "" {
 		if d, err := time.ParseDuration(c.CheckInterval); err == nil {
 			checkInterval = d
 		}
 	}
 
-	renewBefore := 30 * 24 * time.Hour // 30 days
+	renewBefore := acme.DefaultRenewBefore
 	if c.RenewBefore != "" {
 		if d, err := time.ParseDuration(c.RenewBefore); err == nil {
 			renewBefore = d
 		}
 	}
 
-	propagationWait := 60 * time.Second
+	propagationWait := acme.DefaultPropagationWait
 	if c.PropagationWait != "" {
 		if d, err := time.ParseDuration(c.PropagationWait); err == nil {
 			propagationWait = d

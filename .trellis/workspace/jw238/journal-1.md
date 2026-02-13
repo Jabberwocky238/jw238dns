@@ -1008,3 +1008,86 @@ Certificate Naming:
 ### Next Steps
 
 - None - task complete
+
+## Session 12: Fix ACME DNS-01 validation and TXT record handling
+
+**Date**: 2026-02-13
+**Task**: Fix ACME DNS-01 validation and TXT record handling
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 问题分析
+
+之前 ACME DNS-01 验证失败，原因：
+1. 使用外部 DNS (1.1.1.1, 8.8.8.8) 无法解析自定义域名
+2. DNS 传播等待时间过长 (60秒)
+3. TXT 记录多值返回格式错误（多个值连接成一个字符串）
+
+## 解决方案
+
+### 1. 修改 ACME DNS 验证服务器
+- **文件**: `acme/client.go`
+- 从外部 DNS 改为使用集群内 jw238dns 服务
+- 使用 `jw238dns.jw238dns.svc.cluster.local:53` 作为验证服务器
+- 添加常量 `ClusterDomain` 便于维护
+
+### 2. 优化 DNS 传播等待
+- **文件**: `acme/dns01.go`
+- 等待时间从 60 秒改为 2 秒（记录立即生效）
+- 删除指数退避逻辑，简化为直接等待
+- 替换 deprecated 的 `GetRecord` 为 `GetChallengeInfo`
+
+### 3. 修复 TXT 记录多值问题（关键修复）
+- **文件**: `dns/frontend.go`
+- 问题：多个 TXT 值被连接成一个字符串返回
+- 修复：为每个 TXT 值创建独立的 DNS RR
+- 将 TXT 加入多值处理逻辑（类似 A/AAAA 记录）
+
+## 技术细节
+
+**修复前 TXT 响应**:
+```
+_acme-challenge.mesh-worker.cloud TXT "value1value2"
+```
+
+**修复后 TXT 响应**:
+```
+_acme-challenge.mesh-worker.cloud TXT "value1"
+_acme-challenge.mesh-worker.cloud TXT "value2"
+```
+
+## 影响范围
+
+- ACME 证书申请流程
+- DNS TXT 记录查询响应格式
+- 所有使用多值 TXT 记录的场景
+
+## 测试建议
+
+1. 重新部署 jw238dns
+2. 触发 ACME 证书申请
+3. 验证 DNS-01 challenge 是否成功
+4. 检查 TXT 记录查询返回格式
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `25f0697` | (see git log) |
+| `00446a6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

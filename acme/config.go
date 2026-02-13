@@ -2,6 +2,18 @@ package acme
 
 import "time"
 
+const (
+	// DefaultCheckInterval is how often to check for certificates needing renewal
+	DefaultCheckInterval = 24 * time.Hour
+
+	// DefaultRenewBefore is how long before expiry to renew certificates
+	DefaultRenewBefore = 30 * 24 * time.Hour // 30 days
+
+	// DefaultPropagationWait is the default wait time for DNS propagation.
+	// Short wait since records are immediately available in memory.
+	DefaultPropagationWait = 2 * time.Second
+)
+
 // EABConfig holds External Account Binding credentials for ACME providers
 // that require it (e.g., ZeroSSL).
 type EABConfig struct {
@@ -60,9 +72,9 @@ func DefaultConfig() *Config {
 		ServerURL:       "https://acme-staging-v02.api.letsencrypt.org/directory",
 		KeyType:         "RSA2048",
 		AutoRenew:       true,
-		CheckInterval:   24 * time.Hour,
-		RenewBefore:     30 * 24 * time.Hour, // 30 days
-		PropagationWait: 60 * time.Second,
+		CheckInterval:   DefaultCheckInterval,
+		RenewBefore:     DefaultRenewBefore,
+		PropagationWait: DefaultPropagationWait,
 		Storage: StorageConfig{
 			Type:      "kubernetes-secret",
 			Namespace: "default",

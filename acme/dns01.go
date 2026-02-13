@@ -24,7 +24,7 @@ type DNS01Provider struct {
 func NewDNS01Provider(store storage.CoreStorage) *DNS01Provider {
 	return &DNS01Provider{
 		storage:         store,
-		propagationWait: 2 * time.Second, // Short wait since records are immediately available
+		propagationWait: DefaultPropagationWait,
 	}
 }
 
@@ -103,7 +103,7 @@ func (p *DNS01Provider) CleanUp(domain, token, keyAuth string) error {
 
 // Timeout returns the timeout and interval to use when checking for DNS propagation.
 func (p *DNS01Provider) Timeout() (timeout, interval time.Duration) {
-	return 2 * time.Minute, 2 * time.Second
+	return 2 * time.Minute, 5 * time.Second
 }
 
 // Sequential returns whether challenges should be run sequentially.
