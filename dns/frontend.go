@@ -98,8 +98,10 @@ func (f *Frontend) ReceiveQuery(ctx context.Context, query *dns.Msg) (*dns.Msg, 
 	}
 
 	for _, r := range records {
-		// For A/AAAA records with multiple values, create one RR per IP
-		if (r.Type == types.RecordTypeA || r.Type == types.RecordTypeAAAA) && len(r.Value) > 1 {
+		// For record types with multiple values, create one RR per value
+		// This applies to: A, AAAA, NS, MX, and other multi-value types
+		if len(r.Value) > 1 && (r.Type == types.RecordTypeA || r.Type == types.RecordTypeAAAA ||
+			r.Type == types.RecordTypeNS || r.Type == types.RecordTypeMX) {
 			for _, val := range r.Value {
 				singleRec := &types.DNSRecord{
 					Name:  r.Name,
@@ -131,9 +133,25 @@ func (f *Frontend) ReceiveQuery(ctx context.Context, query *dns.Msg) (*dns.Msg, 
 		})
 		if nsErr == nil {
 			for _, r := range nsRecords {
-				rr := buildRR(r)
-				if rr != nil {
-					resp.Ns = append(resp.Ns, rr)
+				// Handle multiple NS records
+				if len(r.Value) > 1 {
+					for _, val := range r.Value {
+						singleRec := &types.DNSRecord{
+							Name:  r.Name,
+							Type:  r.Type,
+							TTL:   r.TTL,
+							Value: []string{val},
+						}
+						rr := buildRR(singleRec)
+						if rr != nil {
+							resp.Ns = append(resp.Ns, rr)
+						}
+					}
+				} else {
+					rr := buildRR(r)
+					if rr != nil {
+						resp.Ns = append(resp.Ns, rr)
+					}
 				}
 			}
 		}
