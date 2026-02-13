@@ -2,9 +2,9 @@
 # Complete mesh-worker.cloud setup with TLS
 #
 # This file contains:
-# 1. Cross-namespace RBAC for certificate storage
-# 2. Traefik IngressRoute with TLS
-# 3. HTTP to HTTPS redirect
+# 1. Traefik IngressRoute with TLS (in jw238dns namespace)
+# 2. Cross-namespace service reference to worker namespace
+# 3. Optional HTTP to HTTPS redirect
 #
 # Prerequisites:
 # - jw238dns deployed with ACME enabled
@@ -15,33 +15,9 @@
 # Deploy:
 # kubectl apply -f k8s-mesh-worker-tls.yaml
 #
-
----
-# Cross-namespace RBAC: Allow jw238dns to create secrets in worker namespace
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: jw238dns-cert-manager
-  namespace: worker
-rules:
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: jw238dns-cert-manager
-  namespace: worker
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: jw238dns-cert-manager
-subjects:
-  - kind: ServiceAccount
-    name: jw238dns
-    namespace: jw238dns
+# Note: Certificate and IngressRoute are in jw238dns namespace,
+#       but route to service in worker namespace (cross-namespace reference)
+#
 
 ---
 # Traefik IngressRoute with TLS for HTTPS traffic
@@ -49,7 +25,7 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: mesh-worker-https
-  namespace: worker
+  namespace: jw238dns
 spec:
   entryPoints:
     - websecure  # HTTPS (port 443)
@@ -60,16 +36,49 @@ spec:
       services:
         - name: w-9bee9648-jabber979114
           port: 10086
-          namespace: worker
+          namespace: worker  # Cross-namespace service reference
 
-    # All subdomains
-    - match: HostRegexp(`{subdomain:[a-z0-9-]+}.mesh-worker.cloud`)
+    # All subdomains (including multi-level)
+    - match: HostRegexp(`{subdomain:.+}.mesh-worker.cloud`)
       kind: Rule
       services:
         - name: w-9bee9648-jabber979114
           port: 10086
-          namespace: worker
+          namespace: worker  # Cross-namespace service reference
 
   tls:
-    # Certificate will be created by jw238dns as: tls-wildcard-mesh-worker-cloud
+    # Certificate created by jw238dns in same namespace
     secretName: tls-wildcard-mesh-worker-cloud
+
+---
+# Optional: HTTP to HTTPS redirect
+# Uncomment to enable automatic HTTPS redirect
+#
+# apiVersion: traefik.io/v1alpha1
+# kind: Middleware
+# metadata:
+#   name: https-redirect
+#   namespace: jw238dns
+# spec:
+#   redirectScheme:
+#     scheme: https
+#     permanent: true
+#
+# ---
+# apiVersion: traefik.io/v1alpha1
+# kind: IngressRoute
+# metadata:
+#   name: mesh-worker-http
+#   namespace: jw238dns
+# spec:
+#   entryPoints:
+#     - web  # HTTP (port 80)
+#   routes:
+#     - match: Host(`mesh-worker.cloud`) || HostRegexp(`{subdomain:.+}.mesh-worker.cloud`)
+#       kind: Rule
+#       middlewares:
+#         - name: https-redirect
+#       services:
+#         - name: w-9bee9648-jabber979114
+#           port: 10086
+#           namespace: worker

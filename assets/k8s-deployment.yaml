@@ -120,16 +120,26 @@ data:
 
     acme:
       enabled: true
-      mode: "zerossl"
+      mode: "zerossl"  # Options: "zerossl", "letsencrypt", "letsencrypt-staging"
       email: "shadowsocks1984@gmail.com"
+      key_type: "RSA2048"  # Options: RSA2048, RSA4096, EC256, EC384
+
       # EAB credentials (required for ZeroSSL, ignored for Let's Encrypt)
       eab:
         kid_env: "ACME_EAB_KID"
         hmac_env: "ACME_EAB_HMAC"
+
+      # Auto-renewal settings
       auto_renew: true
+      check_interval: "24h"        # How often to check for renewal
+      renew_before: "720h"         # Renew 30 days before expiry (720h = 30*24h)
+      propagation_wait: "60s"      # Wait time for DNS propagation
+
+      # Certificate storage configuration
       storage:
-        type: "kubernetes-secret"
-        namespace: "worker"  # Store in worker namespace for Traefik
+        type: "kubernetes-secret"  # Options: "kubernetes-secret", "file"
+        namespace: "jw238dns"      # K8s namespace for storing certificates
+        # path: "/app/certs"       # File path (only used if type is "file")
 
     # Domains to obtain certificates for
     domains:
