@@ -14,10 +14,9 @@ RUN go mod download
 COPY . .
 
 # Download GeoIP database during build
-RUN mkdir -p assets && \
-    curl -L -o assets/GeoLite2-City.mmdb \
-    "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" && \
-    ls -lh assets/GeoLite2-City.mmdb
+RUN mkdir -p assets
+RUN curl -L -o assets/GeoLite2-City.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"
+RUN ls -lh assets/GeoLite2-City.mmdb
 
 # Build the application
 RUN go build -ldflags="-w -s" -o jw238dns ./cmd/jw238dns

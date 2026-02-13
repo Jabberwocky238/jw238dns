@@ -22,7 +22,9 @@
       "Bash(go fmt:*)",
       "Bash(bash:*)",
       "Bash(ls:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(nslookup:*)",
+      "Bash(dig:*)"
     ]
   }
 }
