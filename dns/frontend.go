@@ -98,8 +98,8 @@ func (f *Frontend) ReceiveQuery(ctx context.Context, query *dns.Msg) (*dns.Msg, 
 	}
 
 	for _, r := range records {
-		// For A/AAAA records with multiple values, create one RR per IP
-		if (r.Type == types.RecordTypeA || r.Type == types.RecordTypeAAAA) && len(r.Value) > 1 {
+		// For A/AAAA/TXT records with multiple values, create one RR per value
+		if (r.Type == types.RecordTypeA || r.Type == types.RecordTypeAAAA || r.Type == types.RecordTypeTXT) && len(r.Value) > 1 {
 			for _, val := range r.Value {
 				singleRec := &types.DNSRecord{
 					Name:  r.Name,

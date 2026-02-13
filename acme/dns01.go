@@ -24,13 +24,15 @@ type DNS01Provider struct {
 func NewDNS01Provider(store storage.CoreStorage) *DNS01Provider {
 	return &DNS01Provider{
 		storage:         store,
-		propagationWait: 60 * time.Second, // Default wait time for DNS propagation
+		propagationWait: 2 * time.Second, // Short wait since records are immediately available
 	}
 }
 
 // Present creates the TXT record for ACME DNS-01 challenge.
 func (p *DNS01Provider) Present(domain, token, keyAuth string) error {
-	fqdn, value := dns01.GetRecord(domain, keyAuth)
+	info := dns01.GetChallengeInfo(domain, keyAuth)
+	fqdn := info.FQDN
+	value := info.Value
 
 	// Normalize FQDN: remove wildcard prefix if present
 	// *.example.com should use _acme-challenge.example.com., not _acme-challenge.*.example.com.
@@ -74,42 +76,16 @@ func (p *DNS01Provider) Present(domain, token, keyAuth string) error {
 	}
 
 	// Wait for DNS propagation with exponential backoff logging
-	p.waitForPropagation(domain)
+	slog.Info("waiting for DNS record propagation", "domain", domain, "wait", p.propagationWait)
+	time.Sleep(p.propagationWait)
+	slog.Info("DNS propagation wait complete", "domain", domain)
 	return nil
-}
-
-// waitForPropagation waits for DNS propagation with exponential backoff logging.
-// Logs at intervals: 1s, 2s, 4s, 8s, 8s, 8s... until total wait time is reached.
-func (p *DNS01Provider) waitForPropagation(domain string) {
-	totalWait := p.propagationWait
-	elapsed := time.Duration(0)
-	interval := 1 * time.Second
-	maxInterval := 8 * time.Second
-
-	slog.Info("waiting for DNS record propagation", "domain", domain, "total_wait", totalWait)
-
-	for elapsed < totalWait {
-		time.Sleep(interval)
-		elapsed += interval
-
-		// Log progress with exponential backoff
-		if elapsed < totalWait {
-			slog.Info("DNS propagation in progress", "domain", domain, "elapsed", elapsed, "remaining", totalWait-elapsed)
-		}
-
-		// Exponential backoff: 1s -> 2s -> 4s -> 8s (max)
-		interval *= 2
-		if interval > maxInterval {
-			interval = maxInterval
-		}
-	}
-
-	slog.Info("DNS propagation wait complete", "domain", domain, "total_wait", totalWait)
 }
 
 // CleanUp removes the TXT record after ACME DNS-01 challenge completion.
 func (p *DNS01Provider) CleanUp(domain, token, keyAuth string) error {
-	fqdn, _ := dns01.GetRecord(domain, keyAuth)
+	info := dns01.GetChallengeInfo(domain, keyAuth)
+	fqdn := info.FQDN
 
 	// Normalize FQDN: remove wildcard prefix if present
 	fqdn = normalizeFQDN(fqdn)
