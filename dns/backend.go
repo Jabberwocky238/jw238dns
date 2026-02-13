@@ -28,6 +28,9 @@ type BackendConfig struct {
 	ReturnSOAOnNXDOMAIN bool   // Attach SOA to NXDOMAIN responses
 	EnableGeoIP         bool   // Enable GeoIP distance-based sorting
 	MMDBPath            string // Path to MaxMind MMDB file
+
+	// Upstream forwarding configuration.
+	Forwarder ForwarderConfig // Upstream DNS forwarder configuration
 }
 
 // DefaultBackendConfig returns a BackendConfig with sensible defaults.
@@ -37,6 +40,7 @@ func DefaultBackendConfig() BackendConfig {
 		ResolveCNAMEChain:   true,
 		MaxCNAMEDepth:       10,
 		ReturnSOAOnNXDOMAIN: true,
+		Forwarder:           DefaultForwarderConfig(),
 	}
 }
 
@@ -46,6 +50,7 @@ type Backend struct {
 	config    BackendConfig
 	geoReader geoip.IPLookup
 	geoCloser func() error
+	forwarder *Forwarder
 }
 
 // NewBackend creates a Backend backed by the given storage and config.
@@ -53,8 +58,9 @@ type Backend struct {
 // disabled and a warning is logged.
 func NewBackend(store storage.CoreStorage, cfg BackendConfig) *Backend {
 	b := &Backend{
-		storage: store,
-		config:  cfg,
+		storage:   store,
+		config:    cfg,
+		forwarder: NewForwarder(cfg.Forwarder),
 	}
 
 	if cfg.EnableGeoIP && cfg.MMDBPath != "" {
@@ -114,6 +120,14 @@ func (b *Backend) Resolve(ctx context.Context, query *types.QueryInfo) ([]*types
 			chainRecs, _ = b.ApplyRules(ctx, chainRecs)
 			b.applyGeoSort(chainRecs, query)
 			return chainRecs, nil
+		}
+	}
+
+	// Forward to upstream DNS if enabled and local lookup missed.
+	if b.forwarder != nil {
+		upstreamRecs, upstreamErr := b.forwarder.Forward(ctx, query.Domain, query.Type)
+		if upstreamErr == nil && len(upstreamRecs) > 0 {
+			return upstreamRecs, nil
 		}
 	}
 
@@ -209,3 +223,4 @@ func (b *Backend) resolveAny(ctx context.Context, domain string) ([]*types.DNSRe
 	matched, _ = b.ApplyRules(ctx, matched)
 	return matched, nil
 }
+

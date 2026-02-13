@@ -186,8 +186,9 @@ type DNSBackend interface {
 **Response Generation**:
 1. Lookup records from Core Storage
 2. Apply any configured rules (e.g., filtering, transformation)
-3. Format response according to DNS protocol
-4. Handle special cases (NXDOMAIN, CNAME chains, etc.)
+3. If not found locally, forward to upstream DNS (if enabled)
+4. Format response according to DNS protocol
+5. Handle special cases (NXDOMAIN, CNAME chains, etc.)
 
 **Configuration-Based Behavior**:
 ```yaml
@@ -204,7 +205,80 @@ backend:
 
   # Return SOA on NXDOMAIN
   return_soa_on_nxdomain: true
+
+  # Upstream DNS forwarding (for recursive queries)
+  upstream:
+    enabled: true
+    servers:
+      - "1.1.1.1:53"
+      - "8.8.8.8:53"  # fallback
+    timeout: "5s"
 ```
+
+### 3.1 Upstream DNS Forwarding
+
+**Purpose**: Enable recursive DNS resolution by forwarding unknown queries to upstream DNS servers
+
+**Architecture**:
+```go
+type Forwarder struct {
+    config ForwarderConfig
+    client *dns.Client
+}
+
+type ForwarderConfig struct {
+    Enabled bool          // Enable upstream forwarding
+    Servers []string      // Upstream DNS server addresses
+    Timeout time.Duration // Query timeout
+}
+```
+
+**Resolution Flow**:
+1. Query local storage first
+2. If not found and upstream enabled:
+   - Forward query to first upstream server
+   - On timeout/network error: try next server
+   - On NXDOMAIN/SERVFAIL: return immediately (no retry)
+3. Convert upstream response to internal DNSRecord format
+4. Return to frontend
+
+**Fallback Logic**:
+- Try each upstream server in order
+- Network errors trigger fallback to next server
+- Authoritative negative responses (NXDOMAIN, SERVFAIL) are final
+- If all servers fail, return ErrRecordNotFound
+
+**Implementation**:
+```go
+func (f *Forwarder) Forward(ctx context.Context, domain string, qtype uint16) ([]*DNSRecord, error) {
+    query := new(dns.Msg)
+    query.SetQuestion(domain, qtype)
+    query.RecursionDesired = true
+
+    for _, server := range f.config.Servers {
+        resp, _, err := f.client.ExchangeContext(ctx, query, server)
+        if err != nil {
+            // Network error, try next server
+            continue
+        }
+
+        if resp.Rcode == dns.RcodeNameError || resp.Rcode == dns.RcodeServerFailure {
+            // Authoritative negative response, don't retry
+            return nil, fmt.Errorf("upstream %s: %s", server, dns.RcodeToString[resp.Rcode])
+        }
+
+        // Convert dns.RR to DNSRecord
+        return f.rrToRecords(resp.Answer), nil
+    }
+
+    return nil, ErrRecordNotFound
+}
+```
+
+**Use Cases**:
+- **Hybrid DNS**: Authoritative for managed domains, recursive for others
+- **Split-horizon DNS**: Internal domains from storage, external from upstream
+- **Development**: Local overrides with fallback to public DNS
 
 ### 4. Management Interfaces
 
@@ -541,7 +615,28 @@ var (
 )
 ```
 
+## Module Structure
+
+```
+dns/
+├── frontend.go          # DNS query receiver and parser
+├── frontend_test.go     # Frontend tests
+├── backend.go           # Response generator with storage integration
+├── backend_test.go      # Backend tests
+├── forward.go           # Upstream DNS forwarder (NEW)
+├── forward_test.go      # Forwarder tests (NEW)
+├── helpers.go           # Shared utilities
+└── helpers_test.go      # Helper tests
+```
+
+**New Module: forward.go**
+- Encapsulates upstream DNS forwarding logic
+- Independent from backend core logic
+- Fully tested with comprehensive test coverage
+- Supports multiple upstream servers with fallback
+- Converts upstream responses to internal format
+
 ---
 
-**Last Updated**: 2026-02-12
+**Last Updated**: 2026-02-13
 **Project**: jw238dns - Cloud-Native DNS Module

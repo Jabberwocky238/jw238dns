@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"jabberwocky238/jw238dns/geoip"
 	"jabberwocky238/jw238dns/storage"
@@ -494,5 +495,66 @@ func TestBackend_Close_NoGeoIP(t *testing.T) {
 	err := backend.Close()
 	if err != nil {
 		t.Errorf("Close() without GeoIP should return nil, got %v", err)
+	}
+}
+
+// --- Upstream forwarding tests ---
+
+func TestBackend_UpstreamDisabled_ReturnsNXDOMAIN(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	ctx := context.Background()
+
+	cfg := DefaultBackendConfig()
+	cfg.Forwarder.Enabled = false
+	backend := NewBackend(store, cfg)
+
+	_, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain: "google.com.", Type: dns.TypeA, Class: dns.ClassINET,
+	})
+	if err != types.ErrRecordNotFound {
+		t.Errorf("Resolve() with upstream disabled should return ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestBackend_UpstreamEnabled_NoServers_ReturnsNXDOMAIN(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	ctx := context.Background()
+
+	cfg := DefaultBackendConfig()
+	cfg.Forwarder.Enabled = true
+	cfg.Forwarder.Servers = nil // no servers configured
+	backend := NewBackend(store, cfg)
+
+	_, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain: "google.com.", Type: dns.TypeA, Class: dns.ClassINET,
+	})
+	if err != types.ErrRecordNotFound {
+		t.Errorf("Resolve() with no upstream servers should return ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestBackend_UpstreamEnabled_LocalHit_SkipsUpstream(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	ctx := context.Background()
+
+	_ = store.Create(ctx, &types.DNSRecord{
+		Name: "local.example.com.", Type: types.RecordTypeA, TTL: 300, Value: []string{"10.0.0.1"},
+	})
+
+	cfg := DefaultBackendConfig()
+	cfg.Forwarder.Enabled = true
+	// Use an unreachable server to prove it's never called.
+	cfg.Forwarder.Servers = []string{"192.0.2.1:53"}
+	cfg.Forwarder.Timeout = 1 * time.Second
+	backend := NewBackend(store, cfg)
+
+	recs, err := backend.Resolve(ctx, &types.QueryInfo{
+		Domain: "local.example.com.", Type: dns.TypeA, Class: dns.ClassINET,
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if len(recs) != 1 || recs[0].Value[0] != "10.0.0.1" {
+		t.Errorf("expected local record 10.0.0.1, got %v", recs)
 	}
 }

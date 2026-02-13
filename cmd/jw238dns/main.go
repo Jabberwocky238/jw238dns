@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"jabberwocky238/jw238dns/acme"
 	"jabberwocky238/jw238dns/dns"
@@ -111,6 +112,29 @@ func main() {
 	if config.GeoIP.Enabled {
 		backendConfig.EnableGeoIP = true
 		backendConfig.MMDBPath = config.GeoIP.MMDBPath
+	}
+
+	// Wire upstream forwarding config.
+	if config.DNS.Upstream.Enabled {
+		backendConfig.Forwarder.Enabled = true
+		if len(config.DNS.Upstream.Servers) > 0 {
+			backendConfig.Forwarder.Servers = config.DNS.Upstream.Servers
+		}
+		if config.DNS.Upstream.Timeout != "" {
+			d, err := time.ParseDuration(config.DNS.Upstream.Timeout)
+			if err != nil {
+				slog.Warn("Invalid upstream timeout, using default 5s",
+					"value", config.DNS.Upstream.Timeout,
+					"error", err,
+				)
+			} else {
+				backendConfig.Forwarder.Timeout = d
+			}
+		}
+		slog.Info("Upstream DNS forwarding enabled",
+			"servers", backendConfig.Forwarder.Servers,
+			"timeout", backendConfig.Forwarder.Timeout,
+		)
 	}
 
 	backend := dns.NewBackend(store, backendConfig)
@@ -219,9 +243,17 @@ type Config struct {
 }
 
 type DNSConfig struct {
-	Listen     string `yaml:"listen"`
-	TCPEnabled bool   `yaml:"tcp_enabled"`
-	UDPEnabled bool   `yaml:"udp_enabled"`
+	Listen     string         `yaml:"listen"`
+	TCPEnabled bool           `yaml:"tcp_enabled"`
+	UDPEnabled bool           `yaml:"udp_enabled"`
+	Upstream   UpstreamConfig `yaml:"upstream"`
+}
+
+// UpstreamConfig controls forwarding of unresolved queries to upstream DNS servers.
+type UpstreamConfig struct {
+	Enabled bool     `yaml:"enabled"`
+	Servers []string `yaml:"servers"`
+	Timeout string   `yaml:"timeout"`
 }
 
 type GeoIPConfig struct {

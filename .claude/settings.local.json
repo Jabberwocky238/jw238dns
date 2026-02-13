@@ -21,7 +21,8 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat\\(acme\\): implement DNS-01 ACME challenge support\n\nImplement automatic TLS certificate management using DNS-01 ACME\nchallenges with Let''s Encrypt and other ACME-compatible CAs.\n\nFeatures:\n- DNS-01 challenge provider integrated with storage layer\n- Automatic certificate issuance and renewal\n- Wildcard certificate support \\(*.example.com\\)\n- Multi-domain \\(SAN\\) certificates\n- Kubernetes Secret storage backend\n- File system storage backend\n- Configurable renewal policies \\(default: 30 days before expiry\\)\n- Let''s Encrypt production and staging support\n\nImplementation:\n- client.go: ACME client wrapper using go-acme/lego v4\n- dns01.go: DNS-01 provider with TXT record management\n- manager.go: Certificate lifecycle manager with auto-renewal\n- storage.go: Kubernetes Secret and file storage backends\n- config.go: Configuration structures with sensible defaults\n\nTesting:\n- 23 unit tests covering all core functionality\n- DNS-01 challenge flow \\(Present/CleanUp\\)\n- Certificate storage \\(K8s Secret and file system\\)\n- Configuration validation\n- All tests passing\n\nDocumentation:\n- Comprehensive README with usage examples\n- Example configuration file \\(assets/example-acme-config.yaml\\)\n- Architecture diagrams and flow descriptions\n\nDependencies:\n- Added github.com/go-acme/lego/v4 for ACME protocol\n- Integrated with existing storage layer for DNS records\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(go fmt:*)",
       "Bash(bash:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(dir:*)"
     ]
   }
 }
