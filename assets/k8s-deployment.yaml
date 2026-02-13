@@ -273,6 +273,23 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            # ACME EAB credentials from secret
+            - name: ACME_EAB_KID
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: acme-eab-kid
+            - name: ACME_EAB_HMAC
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: acme-eab-hmac
+            # HTTP authentication token
+            - name: HTTP_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jw238dns-auth
+                  key: http-token
           volumeMounts:
             - name: config
               mountPath: /app/config

@@ -485,3 +485,89 @@ Created three detailed markdown documents: HTTP API documentation with examples,
 ### Next Steps
 
 - None - task complete
+
+## Session 9: Update ACME configuration and simplify TLS architecture
+
+**Date**: 2026-02-13
+**Task**: Update ACME configuration and simplify TLS architecture
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+根据最新的 ACME 实现代码，更新了 Kubernetes 配置文件，并简化了 TLS 证书管理架构。
+
+## Changes
+
+### 1. k8s-deployment.yaml - 完善 ACME 配置
+
+添加了完整的 ACME 配置选项：
+
+| Configuration | Description | Default |
+|---------------|-------------|---------|
+| `key_type` | 证书密钥类型 | RSA2048 (支持 RSA2048/RSA4096/EC256/EC384) |
+| `check_interval` | 自动续期检查间隔 | 24h |
+| `renew_before` | 提前续期时间 | 720h (30天) |
+| `propagation_wait` | DNS 传播等待时间 | 60s |
+| `storage.namespace` | 证书存储命名空间 | jw238dns (改为与应用同命名空间) |
+
+### 2. k8s-mesh-worker-tls.yaml - 简化架构
+
+**架构优化**：
+- 移除跨 namespace RBAC 配置（Role 和 RoleBinding）
+- 将 IngressRoute 和证书都放在 `jw238dns` namespace
+- 通过 Traefik 的跨 namespace service 引用功能访问 `worker` namespace 的服务
+
+**改进**：
+- 子域名正则从 `[a-z0-9-]+` 改为 `.+`，支持多级子域名
+- 添加 HTTP 到 HTTPS 重定向的注释示例
+
+**新架构**：
+```
+jw238dns namespace:
+  ├── jw238dns Pod (ACME 客户端)
+  ├── Secret: tls-wildcard-mesh-worker-cloud (证书)
+  └── IngressRoute: mesh-worker-https (路由)
+       └── 转发到 → worker/w-9bee9648-jabber979114:10086
+
+worker namespace:
+  └── Service: w-9bee9648-jabber979114 (后端服务)
+```
+
+### 3. 任务管理
+
+- 归档了任务 `02-13-fix-wildcard-response`
+
+## Benefits
+
+1. **配置完整性**：所有 ACME 配置项都有详细说明和默认值
+2. **架构简化**：不需要跨 namespace RBAC，部署更简单
+3. **更好的兼容性**：支持多级子域名匹配
+4. **易于维护**：证书和路由在同一 namespace，管理更集中
+
+## Updated Files
+
+- `assets/k8s-deployment.yaml` - ACME 配置完善
+- `assets/k8s-mesh-worker-tls.yaml` - TLS 架构简化
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e8fcf76` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

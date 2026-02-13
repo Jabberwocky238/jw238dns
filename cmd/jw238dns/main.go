@@ -57,6 +57,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Validate configuration
+	if err := validateConfig(config); err != nil {
+		slog.Error("Configuration validation failed", "error", err)
+		os.Exit(1)
+	}
+
 	// Initialize storage
 	store := storage.NewMemoryStorage()
 
@@ -299,6 +305,63 @@ func loadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+// validateConfig validates the configuration and checks required environment variables
+func validateConfig(config *Config) error {
+	// Validate HTTP authentication
+	if config.HTTP.Enabled && config.HTTP.Auth.Enabled {
+		if config.HTTP.Auth.TokenEnv == "" {
+			return fmt.Errorf("HTTP authentication is enabled but token_env is not configured")
+		}
+		token := os.Getenv(config.HTTP.Auth.TokenEnv)
+		if token == "" {
+			return fmt.Errorf("HTTP authentication is enabled but environment variable %s is not set or empty", config.HTTP.Auth.TokenEnv)
+		}
+		slog.Info("HTTP authentication validated", "token_env", config.HTTP.Auth.TokenEnv)
+	}
+
+	// Validate ACME configuration
+	if config.ACME.Enabled {
+		// Validate email
+		if config.ACME.Email == "" {
+			return fmt.Errorf("ACME is enabled but email is not configured")
+		}
+
+		// Validate EAB credentials for ZeroSSL
+		if config.ACME.Mode == "zerossl" {
+			if config.ACME.EAB.KidEnv == "" || config.ACME.EAB.HmacEnv == "" {
+				return fmt.Errorf("ACME mode is 'zerossl' but EAB environment variable names are not configured")
+			}
+
+			kid := os.Getenv(config.ACME.EAB.KidEnv)
+			hmac := os.Getenv(config.ACME.EAB.HmacEnv)
+
+			if kid == "" {
+				return fmt.Errorf("ACME mode is 'zerossl' but environment variable %s (EAB KID) is not set or empty", config.ACME.EAB.KidEnv)
+			}
+			if hmac == "" {
+				return fmt.Errorf("ACME mode is 'zerossl' but environment variable %s (EAB HMAC) is not set or empty", config.ACME.EAB.HmacEnv)
+			}
+
+			slog.Info("ZeroSSL EAB credentials validated",
+				"kid_env", config.ACME.EAB.KidEnv,
+				"hmac_env", config.ACME.EAB.HmacEnv)
+		}
+
+		// Validate storage configuration
+		if config.ACME.Storage.Type == "" {
+			return fmt.Errorf("ACME is enabled but storage type is not configured")
+		}
+		if config.ACME.Storage.Type == "kubernetes-secret" && config.ACME.Storage.Namespace == "" {
+			return fmt.Errorf("ACME storage type is 'kubernetes-secret' but namespace is not configured")
+		}
+		if config.ACME.Storage.Type == "file" && config.ACME.Storage.Path == "" {
+			return fmt.Errorf("ACME storage type is 'file' but path is not configured")
+		}
+	}
+
+	return nil
+}
+
 // Config represents the application configuration
 type Config struct {
 	DNS     DNSConfig       `yaml:"dns"`
@@ -367,13 +430,17 @@ type EABEnvConfig struct {
 }
 
 type ACMEConfig struct {
-	Enabled   bool              `yaml:"enabled"`
-	Mode      string            `yaml:"mode"`
-	Server    string            `yaml:"server"`
-	Email     string            `yaml:"email"`
-	EAB       EABEnvConfig      `yaml:"eab"`
-	AutoRenew bool              `yaml:"auto_renew"`
-	Storage   ACMEStorageConfig `yaml:"storage"`
+	Enabled         bool              `yaml:"enabled"`
+	Mode            string            `yaml:"mode"`
+	Server          string            `yaml:"server"`
+	Email           string            `yaml:"email"`
+	KeyType         string            `yaml:"key_type"`
+	EAB             EABEnvConfig      `yaml:"eab"`
+	AutoRenew       bool              `yaml:"auto_renew"`
+	CheckInterval   string            `yaml:"check_interval"`
+	RenewBefore     string            `yaml:"renew_before"`
+	PropagationWait string            `yaml:"propagation_wait"`
+	Storage         ACMEStorageConfig `yaml:"storage"`
 }
 
 type ACMEStorageConfig struct {
@@ -398,10 +465,42 @@ func (c *ACMEConfig) ToACMEConfig() *acme.Config {
 		}
 	}
 
+	// Parse duration strings with defaults
+	checkInterval := 24 * time.Hour
+	if c.CheckInterval != "" {
+		if d, err := time.ParseDuration(c.CheckInterval); err == nil {
+			checkInterval = d
+		}
+	}
+
+	renewBefore := 30 * 24 * time.Hour // 30 days
+	if c.RenewBefore != "" {
+		if d, err := time.ParseDuration(c.RenewBefore); err == nil {
+			renewBefore = d
+		}
+	}
+
+	propagationWait := 60 * time.Second
+	if c.PropagationWait != "" {
+		if d, err := time.ParseDuration(c.PropagationWait); err == nil {
+			propagationWait = d
+		}
+	}
+
+	// Set default key type if not specified
+	keyType := c.KeyType
+	if keyType == "" {
+		keyType = "RSA2048"
+	}
+
 	return &acme.Config{
-		ServerURL: serverURL,
-		Email:     c.Email,
-		AutoRenew: c.AutoRenew,
+		ServerURL:       serverURL,
+		Email:           c.Email,
+		KeyType:         keyType,
+		AutoRenew:       c.AutoRenew,
+		CheckInterval:   checkInterval,
+		RenewBefore:     renewBefore,
+		PropagationWait: propagationWait,
 		EAB: acme.EABConfig{
 			KID:     os.Getenv(c.EAB.KidEnv),
 			HMACKey: os.Getenv(c.EAB.HmacEnv),
