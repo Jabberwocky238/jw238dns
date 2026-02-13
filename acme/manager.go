@@ -78,8 +78,14 @@ func (m *Manager) ObtainCertificate(ctx context.Context, domains []string) error
 		return fmt.Errorf("failed to parse certificate: %w", err)
 	}
 
+	// Parse domain for storage
+	mapping, err := ParseDomain(domains[0])
+	if err != nil {
+		return fmt.Errorf("failed to parse domain: %w", err)
+	}
+
 	// Store certificate
-	if err := m.certStorage.Store(ctx, domains[0], cert); err != nil {
+	if err := m.certStorage.Store(ctx, mapping, cert); err != nil {
 		return fmt.Errorf("failed to store certificate: %w", err)
 	}
 
@@ -124,8 +130,14 @@ func (m *Manager) RenewCertificate(ctx context.Context, domain string) error {
 		return fmt.Errorf("failed to parse renewed certificate: %w", err)
 	}
 
+	// Parse domain for storage
+	mapping, err := ParseDomain(domain)
+	if err != nil {
+		return fmt.Errorf("failed to parse domain: %w", err)
+	}
+
 	// Store renewed certificate
-	if err := m.certStorage.Store(ctx, domain, renewed); err != nil {
+	if err := m.certStorage.Store(ctx, mapping, renewed); err != nil {
 		return fmt.Errorf("failed to store renewed certificate: %w", err)
 	}
 
@@ -248,7 +260,13 @@ func extractIssuerCert(certChain []byte) []byte {
 // LoadCertificates loads existing certificates from storage.
 func (m *Manager) LoadCertificates(ctx context.Context, domains []string) error {
 	for _, domain := range domains {
-		cert, err := m.certStorage.Load(ctx, domain)
+		mapping, err := ParseDomain(domain)
+		if err != nil {
+			slog.Warn("failed to parse domain", "domain", domain, "error", err)
+			continue
+		}
+
+		cert, err := m.certStorage.Load(ctx, mapping)
 		if err != nil {
 			slog.Warn("failed to load certificate", "domain", domain, "error", err)
 			continue

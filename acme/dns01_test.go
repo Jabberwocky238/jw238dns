@@ -82,8 +82,8 @@ func TestDNS01Provider_Timeout(t *testing.T) {
 		t.Errorf("timeout = %v, want 2m", timeout)
 	}
 
-	if interval != 2*time.Second {
-		t.Errorf("interval = %v, want 2s", interval)
+	if interval != 5*time.Second {
+		t.Errorf("interval = %v, want 5s", interval)
 	}
 }
 

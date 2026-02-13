@@ -28,8 +28,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("RenewBefore = %v, want 720h", config.RenewBefore)
 	}
 
-	if config.PropagationWait != 60*time.Second {
-		t.Errorf("PropagationWait = %v, want 60s", config.PropagationWait)
+	if config.PropagationWait != 2*time.Second {
+		t.Errorf("PropagationWait = %v, want 2s", config.PropagationWait)
 	}
 
 	if config.Storage.Type != "kubernetes-secret" {

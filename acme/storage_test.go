@@ -24,13 +24,18 @@ func TestKubernetesSecretStorage_Store(t *testing.T) {
 		IssuerCertificate: []byte("issuer-data"),
 	}
 
-	err := storage.Store(ctx, "example.com", cert)
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
+	err = storage.Store(ctx, mapping, cert)
 	if err != nil {
 		t.Fatalf("Store() error = %v", err)
 	}
 
 	// Verify secret was created
-	secret, err := client.CoreV1().Secrets("default").Get(ctx, "tls-example-com", metav1.GetOptions{})
+	secret, err := client.CoreV1().Secrets("default").Get(ctx, "tls-normal--example_com", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get secret error = %v", err)
 	}
@@ -61,7 +66,7 @@ func TestKubernetesSecretStorage_Load(t *testing.T) {
 	// Create a secret first
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tls-example-com",
+			Name:      "tls-normal--example_com",
 			Namespace: "default",
 		},
 		Type: corev1.SecretTypeTLS,
@@ -76,8 +81,13 @@ func TestKubernetesSecretStorage_Load(t *testing.T) {
 		t.Fatalf("Create secret error = %v", err)
 	}
 
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
 	// Load the certificate
-	cert, err := storage.Load(ctx, "example.com")
+	cert, err := storage.Load(ctx, mapping)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -108,7 +118,7 @@ func TestKubernetesSecretStorage_Delete(t *testing.T) {
 	// Create a secret first
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tls-example-com",
+			Name:      "tls-normal--example_com",
 			Namespace: "default",
 		},
 		Type: corev1.SecretTypeTLS,
@@ -118,14 +128,19 @@ func TestKubernetesSecretStorage_Delete(t *testing.T) {
 		t.Fatalf("Create secret error = %v", err)
 	}
 
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
 	// Delete the certificate
-	err = storage.Delete(ctx, "example.com")
+	err = storage.Delete(ctx, mapping)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
 	// Verify secret was deleted
-	_, err = client.CoreV1().Secrets("default").Get(ctx, "tls-example-com", metav1.GetOptions{})
+	_, err = client.CoreV1().Secrets("default").Get(ctx, "tls-normal--example_com", metav1.GetOptions{})
 	if err == nil {
 		t.Error("expected error when getting deleted secret")
 	}
@@ -137,13 +152,18 @@ func TestKubernetesSecretStorage_Update(t *testing.T) {
 
 	ctx := context.Background()
 
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
 	// Store initial certificate
 	cert1 := &certificate.Resource{
 		Domain:      "example.com",
 		Certificate: []byte("cert-data-1"),
 		PrivateKey:  []byte("key-data-1"),
 	}
-	if err := storage.Store(ctx, "example.com", cert1); err != nil {
+	if err := storage.Store(ctx, mapping, cert1); err != nil {
 		t.Fatalf("Store() first call error = %v", err)
 	}
 
@@ -153,12 +173,12 @@ func TestKubernetesSecretStorage_Update(t *testing.T) {
 		Certificate: []byte("cert-data-2"),
 		PrivateKey:  []byte("key-data-2"),
 	}
-	if err := storage.Store(ctx, "example.com", cert2); err != nil {
+	if err := storage.Store(ctx, mapping, cert2); err != nil {
 		t.Fatalf("Store() second call error = %v", err)
 	}
 
 	// Verify secret was updated
-	secret, err := client.CoreV1().Secrets("default").Get(ctx, "tls-example-com", metav1.GetOptions{})
+	secret, err := client.CoreV1().Secrets("default").Get(ctx, "tls-normal--example_com", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get secret error = %v", err)
 	}
@@ -180,13 +200,18 @@ func TestFileStorage_Store(t *testing.T) {
 		IssuerCertificate: []byte("issuer-data"),
 	}
 
-	err := storage.Store(ctx, "example.com", cert)
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
+	err = storage.Store(ctx, mapping, cert)
 	if err != nil {
 		t.Fatalf("Store() error = %v", err)
 	}
 
 	// Verify files were created
-	domainDir := filepath.Join(tmpDir, "example-com")
+	domainDir := filepath.Join(tmpDir, "example_com")
 
 	certData, err := os.ReadFile(filepath.Join(domainDir, "certificate.crt"))
 	if err != nil {
@@ -220,7 +245,7 @@ func TestFileStorage_Load(t *testing.T) {
 	ctx := context.Background()
 
 	// Create files first
-	domainDir := filepath.Join(tmpDir, "example-com")
+	domainDir := filepath.Join(tmpDir, "example_com")
 	if err := os.MkdirAll(domainDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll error = %v", err)
 	}
@@ -229,8 +254,13 @@ func TestFileStorage_Load(t *testing.T) {
 	os.WriteFile(filepath.Join(domainDir, "private.key"), []byte("key-data"), 0o600)
 	os.WriteFile(filepath.Join(domainDir, "issuer.crt"), []byte("issuer-data"), 0o644)
 
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
 	// Load the certificate
-	cert, err := storage.Load(ctx, "example.com")
+	cert, err := storage.Load(ctx, mapping)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -258,88 +288,31 @@ func TestFileStorage_Delete(t *testing.T) {
 
 	ctx := context.Background()
 
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
 	// Create files first
 	cert := &certificate.Resource{
 		Domain:      "example.com",
 		Certificate: []byte("cert-data"),
 		PrivateKey:  []byte("key-data"),
 	}
-	if err := storage.Store(ctx, "example.com", cert); err != nil {
+	if err := storage.Store(ctx, mapping, cert); err != nil {
 		t.Fatalf("Store() error = %v", err)
 	}
 
 	// Delete the certificate
-	err := storage.Delete(ctx, "example.com")
+	err = storage.Delete(ctx, mapping)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
 	// Verify directory was deleted
-	domainDir := filepath.Join(tmpDir, "example-com")
+	domainDir := filepath.Join(tmpDir, "example_com")
 	if _, err := os.Stat(domainDir); !os.IsNotExist(err) {
 		t.Error("expected directory to be deleted")
-	}
-}
-
-func TestSanitizeDomain(t *testing.T) {
-	tests := []struct {
-		name   string
-		domain string
-		want   string
-	}{
-		{
-			name:   "simple domain",
-			domain: "example.com",
-			want:   "example-com",
-		},
-		{
-			name:   "subdomain",
-			domain: "www.example.com",
-			want:   "example-com",
-		},
-		{
-			name:   "wildcard domain",
-			domain: "*.example.com",
-			want:   "example-com",
-		},
-		{
-			name:   "wildcard mesh-worker.cloud",
-			domain: "*.mesh-worker.cloud",
-			want:   "mesh-worker-cloud",
-		},
-		{
-			name:   "apex mesh-worker.cloud",
-			domain: "mesh-worker.cloud",
-			want:   "mesh-worker-cloud",
-		},
-		{
-			name:   "api subdomain",
-			domain: "api.mesh-worker.cloud",
-			want:   "mesh-worker-cloud",
-		},
-		{
-			name:   "multi-level subdomain",
-			domain: "v1.api.mesh-worker.cloud",
-			want:   "mesh-worker-cloud",
-		},
-		{
-			name:   "deep subdomain",
-			domain: "service.v1.api.example.com",
-			want:   "example-com",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sanitizeDomain(tt.domain)
-			if got != tt.want {
-				t.Errorf("sanitizeDomain(%q) = %q, want %q", tt.domain, got, tt.want)
-			}
-
-			// Verify secret name format
-			secretName := domainToK8sSecret(tt.domain)
-			t.Logf("Domain: %s → Secret: %s", tt.domain, secretName)
-		})
 	}
 }
 
@@ -350,7 +323,7 @@ func TestFileStorage_LoadWithoutIssuer(t *testing.T) {
 	ctx := context.Background()
 
 	// Create files without issuer
-	domainDir := filepath.Join(tmpDir, "example-com")
+	domainDir := filepath.Join(tmpDir, "example_com")
 	if err := os.MkdirAll(domainDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll error = %v", err)
 	}
@@ -358,8 +331,13 @@ func TestFileStorage_LoadWithoutIssuer(t *testing.T) {
 	os.WriteFile(filepath.Join(domainDir, "certificate.crt"), []byte("cert-data"), 0o644)
 	os.WriteFile(filepath.Join(domainDir, "private.key"), []byte("key-data"), 0o600)
 
+	mapping, err := ParseDomain("example.com")
+	if err != nil {
+		t.Fatalf("ParseDomain() error = %v", err)
+	}
+
 	// Load should succeed even without issuer
-	cert, err := storage.Load(ctx, "example.com")
+	cert, err := storage.Load(ctx, mapping)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
