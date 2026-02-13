@@ -69,7 +69,7 @@ data:
   app.yaml: |
     dns:
       listen: "0.0.0.0:53"
-      tcp_enabled: true
+      tcp_enabled: false
       udp_enabled: true
       upstream:
         enabled: true
@@ -203,10 +203,6 @@ spec:
     metadata:
       labels:
         app: jw238dns
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: jw238dns
       affinity:
@@ -243,33 +239,7 @@ spec:
             - name: dns-udp
               containerPort: 53
               protocol: UDP
-            - name: dns-tcp
-              containerPort: 53
-              protocol: TCP
-            - name: http
-              containerPort: 8080
-              protocol: TCP
           env:
-            - name: HTTP_AUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: jw238dns-auth
-                  key: http-token
-            - name: ACME_EMAIL
-              valueFrom:
-                secretKeyRef:
-                  name: jw238dns-auth
-                  key: acme-email
-            - name: ACME_EAB_KID
-              valueFrom:
-                secretKeyRef:
-                  name: jw238dns-auth
-                  key: acme-eab-kid
-            - name: ACME_EAB_HMAC
-              valueFrom:
-                secretKeyRef:
-                  name: jw238dns-auth
-                  key: acme-eab-hmac
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -342,47 +312,6 @@ spec:
       port: 53
       targetPort: dns-udp
       protocol: UDP
-  selector:
-    app: jw238dns
-
----
-# Service for DNS (TCP)
-apiVersion: v1
-kind: Service
-metadata:
-  name: jw238dns-dns-tcp
-  namespace: jw238dns
-  labels:
-    app: jw238dns
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-spec:
-  type: LoadBalancer
-  externalTrafficPolicy: Local
-  ports:
-    - name: dns-tcp
-      port: 53
-      targetPort: dns-tcp
-      protocol: TCP
-  selector:
-    app: jw238dns
-
----
-# Service for HTTP Management API
-apiVersion: v1
-kind: Service
-metadata:
-  name: jw238dns-http
-  namespace: jw238dns
-  labels:
-    app: jw238dns
-spec:
-  type: ClusterIP
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
-      protocol: TCP
   selector:
     app: jw238dns
 
