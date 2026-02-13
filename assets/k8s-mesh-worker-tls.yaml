@@ -20,17 +20,17 @@
 #
 
 ---
-# Traefik IngressRoute with TLS for HTTPS traffic
+# Traefik IngressRoute for apex domain (mesh-worker.cloud)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: mesh-worker-https
+  name: mesh-worker-apex-https
   namespace: jw238dns
 spec:
   entryPoints:
     - websecure  # HTTPS (port 443)
   routes:
-    # Apex domain
+    # Apex domain only
     - match: Host(`mesh-worker.cloud`)
       kind: Rule
       services:
@@ -38,6 +38,21 @@ spec:
           port: 10086
           namespace: worker  # Cross-namespace service reference
 
+  tls:
+    # Certificate for apex domain (mesh-worker.cloud)
+    secretName: tls-normal--mesh-worker_cloud
+
+---
+# Traefik IngressRoute for subdomains (*.mesh-worker.cloud)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mesh-worker-wildcard-https
+  namespace: jw238dns
+spec:
+  entryPoints:
+    - websecure  # HTTPS (port 443)
+  routes:
     # All subdomains (including multi-level)
     - match: HostRegexp(`{subdomain:.+}.mesh-worker.cloud`)
       kind: Rule
@@ -47,8 +62,8 @@ spec:
           namespace: worker  # Cross-namespace service reference
 
   tls:
-    # Certificate created by jw238dns in same namespace
-    secretName: tls--mesh-worker-cloud
+    # Certificate for wildcard subdomains (*.mesh-worker.cloud)
+    secretName: tls-wildcard--__mesh-worker_cloud
 
 ---
 # Optional: HTTP to HTTPS redirect
