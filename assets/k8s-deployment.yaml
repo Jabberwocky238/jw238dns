@@ -129,7 +129,14 @@ data:
       auto_renew: true
       storage:
         type: "kubernetes-secret"
-        namespace: "jw238dns"
+        namespace: "worker"  # Store in worker namespace for Traefik
+
+    # Domains to obtain certificates for
+    domains:
+      - domains:
+          - "*.mesh-worker.cloud"
+          - "mesh-worker.cloud"
+        auto_obtain: true
 
 ---
 # Secret for authentication

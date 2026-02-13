@@ -196,6 +196,53 @@ func main() {
 		defer httpSrv.Shutdown()
 	}
 
+	// Initialize ACME Manager if enabled
+	if config.ACME.Enabled {
+		slog.Info("Initializing ACME manager", "mode", config.ACME.Mode, "email", config.ACME.Email)
+
+		// Create certificate storage
+		var certStorage acme.CertificateStorage
+		if config.ACME.Storage.Type == "kubernetes-secret" {
+			k8sClient, err := storage.NewK8sClient()
+			if err != nil {
+				slog.Error("Failed to create Kubernetes client for ACME", "error", err)
+			} else {
+				certStorage = acme.NewKubernetesSecretStorage(k8sClient, config.ACME.Storage.Namespace)
+				slog.Info("Using Kubernetes Secret storage for certificates", "namespace", config.ACME.Storage.Namespace)
+			}
+		} else if config.ACME.Storage.Type == "file" {
+			certStorage = acme.NewFileStorage(config.ACME.Storage.Path)
+			slog.Info("Using file storage for certificates", "path", config.ACME.Storage.Path)
+		}
+
+		if certStorage != nil {
+			// Create ACME manager
+			acmeConfig := config.ACME.ToACMEConfig()
+			manager, err := acme.NewManager(acmeConfig, store, certStorage)
+			if err != nil {
+				slog.Error("Failed to create ACME manager", "error", err)
+			} else {
+				// Obtain certificates for configured domains
+				if len(config.Domains) > 0 {
+					for _, domainConfig := range config.Domains {
+						if domainConfig.AutoObtain {
+							slog.Info("Obtaining certificate", "domains", domainConfig.Domains)
+							if err := manager.ObtainCertificate(ctx, domainConfig.Domains); err != nil {
+								slog.Error("Failed to obtain certificate", "domains", domainConfig.Domains, "error", err)
+							}
+						}
+					}
+				}
+
+				// Start auto-renewal if enabled
+				if config.ACME.AutoRenew {
+					manager.StartAutoRenewal(ctx)
+					slog.Info("ACME auto-renewal started")
+				}
+			}
+		}
+	}
+
 	// Wait for interrupt signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -254,11 +301,18 @@ func loadConfig(path string) (*Config, error) {
 
 // Config represents the application configuration
 type Config struct {
-	DNS     DNSConfig     `yaml:"dns"`
-	GeoIP   GeoIPConfig   `yaml:"geoip"`
-	Storage StorageConfig `yaml:"storage"`
-	HTTP    HTTPConfig    `yaml:"http"`
-	ACME    ACMEConfig    `yaml:"acme"`
+	DNS     DNSConfig       `yaml:"dns"`
+	GeoIP   GeoIPConfig     `yaml:"geoip"`
+	Storage StorageConfig   `yaml:"storage"`
+	HTTP    HTTPConfig      `yaml:"http"`
+	ACME    ACMEConfig      `yaml:"acme"`
+	Domains []DomainConfig  `yaml:"domains"`
+}
+
+// DomainConfig represents a domain certificate configuration
+type DomainConfig struct {
+	Domains     []string `yaml:"domains"`
+	AutoObtain  bool     `yaml:"auto_obtain"`
 }
 
 type DNSConfig struct {

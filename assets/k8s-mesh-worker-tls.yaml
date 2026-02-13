@@ -1,0 +1,75 @@
+---
+# Complete mesh-worker.cloud setup with TLS
+#
+# This file contains:
+# 1. Cross-namespace RBAC for certificate storage
+# 2. Traefik IngressRoute with TLS
+# 3. HTTP to HTTPS redirect
+#
+# Prerequisites:
+# - jw238dns deployed with ACME enabled
+# - ZeroSSL EAB credentials in jw238dns-auth secret
+# - Traefik installed as ingress controller
+# - worker namespace exists with w-9bee9648-jabber979114 service
+#
+# Deploy:
+# kubectl apply -f k8s-mesh-worker-tls.yaml
+#
+
+---
+# Cross-namespace RBAC: Allow jw238dns to create secrets in worker namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jw238dns-cert-manager
+  namespace: worker
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jw238dns-cert-manager
+  namespace: worker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jw238dns-cert-manager
+subjects:
+  - kind: ServiceAccount
+    name: jw238dns
+    namespace: jw238dns
+
+---
+# Traefik IngressRoute with TLS for HTTPS traffic
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mesh-worker-https
+  namespace: worker
+spec:
+  entryPoints:
+    - websecure  # HTTPS (port 443)
+  routes:
+    # Apex domain
+    - match: Host(`mesh-worker.cloud`)
+      kind: Rule
+      services:
+        - name: w-9bee9648-jabber979114
+          port: 10086
+          namespace: worker
+
+    # All subdomains
+    - match: HostRegexp(`{subdomain:[a-z0-9-]+}.mesh-worker.cloud`)
+      kind: Rule
+      services:
+        - name: w-9bee9648-jabber979114
+          port: 10086
+          namespace: worker
+
+  tls:
+    # Certificate will be created by jw238dns as: tls-wildcard-mesh-worker-cloud
+    secretName: tls-wildcard-mesh-worker-cloud
