@@ -116,37 +116,7 @@ data:
       listen: "0.0.0.0:8080"
       auth:
         enabled: true
-        token_env: "HTTP_AUTH_TOKEN"
-
-    acme:
-      enabled: true
-      mode: "zerossl"  # Options: "zerossl", "letsencrypt", "letsencrypt-staging"
-      email: "shadowsocks1984@gmail.com"
-      key_type: "RSA2048"  # Options: RSA2048, RSA4096, EC256, EC384
-
-      # EAB credentials (required for ZeroSSL, ignored for Let's Encrypt)
-      eab:
-        kid_env: "ACME_EAB_KID"
-        hmac_env: "ACME_EAB_HMAC"
-
-      # Auto-renewal settings
-      auto_renew: true
-      check_interval: "24h"        # How often to check for renewal
-      renew_before: "720h"         # Renew 30 days before expiry (720h = 30*24h)
-      propagation_wait: "60s"      # Wait time for DNS propagation
-
-      # Certificate storage configuration
-      storage:
-        type: "kubernetes-secret"  # Options: "kubernetes-secret", "file"
-        namespace: "jw238dns"      # K8s namespace for storing certificates
-        # path: "/app/certs"       # File path (only used if type is "file")
-
-    # Domains to obtain certificates for
-    domains:
-      - domains:
-          - "*.mesh-worker.cloud"
-          - "mesh-worker.cloud"
-        auto_obtain: true
+        token_env: "DNS_HTTP_AUTH_TOKEN"
 
 ---
 # Secret for authentication
@@ -159,10 +129,7 @@ metadata:
     app: jw238dns
 type: Opaque
 stringData:
-  http-token: "${HTTP_AUTH_TOKEN}"
-  acme-email: "shadowsocks1984@gmail.com"
-  acme-eab-kid: "${ZEROSSL_EAB_KID}"
-  acme-eab-hmac: "${ZEROSSL_EAB_HMAC_KEY}"
+  http-token: "${DNS_HTTP_AUTH_TOKEN}"
 
 ---
 # ServiceAccount
@@ -188,10 +155,6 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "watch", "update", "patch"]
-  # Secret access for certificates
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
 
 ---
 # RoleBinding
@@ -273,19 +236,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            # ACME EAB credentials from secret
-            - name: ACME_EAB_KID
-              valueFrom:
-                secretKeyRef:
-                  name: jw238dns-auth
-                  key: acme-eab-kid
-            - name: ACME_EAB_HMAC
-              valueFrom:
-                secretKeyRef:
-                  name: jw238dns-auth
-                  key: acme-eab-hmac
             # HTTP authentication token
-            - name: HTTP_AUTH_TOKEN
+            - name: DNS_HTTP_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: jw238dns-auth

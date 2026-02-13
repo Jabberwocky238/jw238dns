@@ -1369,3 +1369,34 @@ api.mesh-worker.cloud    → tls-normal--api_mesh-worker_cloud
 ### Next Steps
 
 - None - task complete
+
+## Session 15: Remove ACME implementation, delegate to control plane
+
+**Date**: 2026-02-13
+**Task**: Remove ACME implementation, delegate to control plane
+
+### Summary
+
+Removed entire ACME DNS-01 certificate management implementation. Deleted acme/ directory and all related code from main.go. Certificate management will be handled by control plane instead.
+
+### Main Changes
+
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7305573` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
