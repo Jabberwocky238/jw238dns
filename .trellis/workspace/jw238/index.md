@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-02-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~394 | Active |
+| `journal-1.md` | ~425 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 6 | 2026-02-13 | Complete upstream DNS forwarding and ACME EAB support | `e814a19` |
 | 5 | 2026-02-13 | Add upstream DNS forwarding with Forwarder struct | `f2dd3c5` |
 | 4 | 2026-02-12 | K8s Deployment & Build System Setup | `a4e47ba`, `6cdfa01`, `5b01577` |
 | 3 | 2026-02-12 | ConfigMap and JSON File Integration | `486c27d` |

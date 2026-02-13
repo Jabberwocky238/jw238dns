@@ -12,6 +12,7 @@ import (
 
 	"jabberwocky238/jw238dns/acme"
 	"jabberwocky238/jw238dns/dns"
+	jwhttp "jabberwocky238/jw238dns/http"
 	"jabberwocky238/jw238dns/storage"
 
 	mdns "github.com/miekg/dns"
@@ -175,6 +176,24 @@ func main() {
 			}
 		}()
 		defer tcpServer.Shutdown()
+	}
+
+	// Start HTTP management server if enabled.
+	if config.HTTP.Enabled {
+		authToken := ""
+		if config.HTTP.Auth.Enabled && config.HTTP.Auth.TokenEnv != "" {
+			authToken = os.Getenv(config.HTTP.Auth.TokenEnv)
+		}
+		httpSrv := jwhttp.NewServer(jwhttp.ServerConfig{
+			Listen:    config.HTTP.Listen,
+			AuthToken: authToken,
+		}, store)
+		go func() {
+			if err := httpSrv.Start(); err != nil {
+				slog.Error("HTTP management server failed", "error", err)
+			}
+		}()
+		defer httpSrv.Shutdown()
 	}
 
 	// Wait for interrupt signal

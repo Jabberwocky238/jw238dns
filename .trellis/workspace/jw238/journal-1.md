@@ -392,3 +392,34 @@ Forwarder (独立结构体)
 ### Next Steps
 
 - None - task complete
+
+## Session 6: Complete upstream DNS forwarding and ACME EAB support
+
+**Date**: 2026-02-13
+**Task**: Complete upstream DNS forwarding and ACME EAB support
+
+### Summary
+
+Verified both features were already implemented in previous commits (f2dd3c5 forwarder, 04ca10b zerossl eab). Committed k8s deployment and docker config updates. Archived all completed tasks.
+
+### Main Changes
+
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e814a19` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
