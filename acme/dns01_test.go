@@ -7,6 +7,8 @@ import (
 
 	"jabberwocky238/jw238dns/storage"
 	"jabberwocky238/jw238dns/types"
+
+	"github.com/go-acme/lego/v4/challenge/dns01"
 )
 
 func TestDNS01Provider_Present(t *testing.T) {
@@ -165,5 +167,166 @@ func TestDNS01Provider_CleanUp_NonExistent(t *testing.T) {
 	// Cleanup should not error even if record doesn't exist
 	if err := provider.CleanUp(domain, token, keyAuth); err != nil {
 		t.Errorf("CleanUp() on non-existent record error = %v, want nil", err)
+	}
+}
+
+// TestDNS01Provider_MultiDomain_SameFQDN tests the scenario where multiple domains
+// (e.g., *.example.com and example.com) share the same ACME challenge FQDN.
+// This is a common case when obtaining a wildcard certificate with the apex domain.
+func TestDNS01Provider_MultiDomain_SameFQDN(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	provider := NewDNS01Provider(store)
+	provider.SetPropagationWait(10 * time.Millisecond)
+
+	// Simulate two domains that share the same challenge FQDN
+	domain1 := "*.example.com"
+	domain2 := "example.com"
+	token := "test-token"
+	keyAuth1 := "key-auth-for-wildcard"
+	keyAuth2 := "key-auth-for-apex"
+
+	// Get expected values from dns01 library
+	_, expectedValue1 := dns01.GetRecord(domain1, keyAuth1)
+	_, expectedValue2 := dns01.GetRecord(domain2, keyAuth2)
+
+	// Present first domain (wildcard)
+	if err := provider.Present(domain1, token, keyAuth1); err != nil {
+		t.Fatalf("Present() for wildcard domain error = %v", err)
+	}
+
+	// Present second domain (apex) - should append, not replace
+	if err := provider.Present(domain2, token, keyAuth2); err != nil {
+		t.Fatalf("Present() for apex domain error = %v", err)
+	}
+
+	// Verify TXT record contains both values
+	ctx := context.Background()
+	records, err := store.Get(ctx, "_acme-challenge.example.com.", types.RecordTypeTXT)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if len(records) != 1 {
+		t.Fatalf("expected 1 TXT record, got %d", len(records))
+	}
+
+	// The record should have 2 values (one for each domain)
+	if len(records[0].Value) != 2 {
+		t.Errorf("expected 2 TXT values, got %d: %v", len(records[0].Value), records[0].Value)
+	}
+
+	// Verify both values are present (order doesn't matter)
+	values := records[0].Value
+	hasValue1 := false
+	hasValue2 := false
+	for _, v := range values {
+		if v == expectedValue1 {
+			hasValue1 = true
+		}
+		if v == expectedValue2 {
+			hasValue2 = true
+		}
+	}
+
+	if !hasValue1 {
+		t.Errorf("TXT record missing value for wildcard domain (expected: %s, got: %v)", expectedValue1, values)
+	}
+	if !hasValue2 {
+		t.Errorf("TXT record missing value for apex domain (expected: %s, got: %v)", expectedValue2, values)
+	}
+}
+
+// TestDNS01Provider_MultiDomain_Sequential tests presenting multiple domains sequentially
+// and verifies that values are appended correctly.
+func TestDNS01Provider_MultiDomain_Sequential(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	provider := NewDNS01Provider(store)
+	provider.SetPropagationWait(10 * time.Millisecond)
+
+	domain := "example.com"
+	token := "test-token"
+
+	// Present three different challenges for the same domain
+	keyAuths := []string{"auth1", "auth2", "auth3"}
+	expectedValues := make([]string, len(keyAuths))
+
+	// Get expected values from dns01 library
+	for i, keyAuth := range keyAuths {
+		_, expectedValues[i] = dns01.GetRecord(domain, keyAuth)
+	}
+
+	for i, keyAuth := range keyAuths {
+		if err := provider.Present(domain, token, keyAuth); err != nil {
+			t.Fatalf("Present() call %d error = %v", i+1, err)
+		}
+
+		// Verify the number of values increases
+		ctx := context.Background()
+		records, err := store.Get(ctx, "_acme-challenge.example.com.", types.RecordTypeTXT)
+		if err != nil {
+			t.Fatalf("Get() after call %d error = %v", i+1, err)
+		}
+
+		expectedCount := i + 1
+		if len(records[0].Value) != expectedCount {
+			t.Errorf("after call %d: expected %d values, got %d", i+1, expectedCount, len(records[0].Value))
+		}
+	}
+
+	// Verify all values are present
+	ctx := context.Background()
+	records, err := store.Get(ctx, "_acme-challenge.example.com.", types.RecordTypeTXT)
+	if err != nil {
+		t.Fatalf("Get() final check error = %v", err)
+	}
+
+	if len(records[0].Value) != 3 {
+		t.Errorf("expected 3 final values, got %d", len(records[0].Value))
+	}
+
+	for i, expectedValue := range expectedValues {
+		found := false
+		for _, actualValue := range records[0].Value {
+			if actualValue == expectedValue {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("value %d (%s) not found in TXT record, got: %v", i+1, expectedValue, records[0].Value)
+		}
+	}
+}
+
+// TestDNS01Provider_CleanUp_MultiValue tests cleanup when TXT record has multiple values.
+// After cleanup, the record should be completely removed.
+func TestDNS01Provider_CleanUp_MultiValue(t *testing.T) {
+	store := storage.NewMemoryStorage()
+	provider := NewDNS01Provider(store)
+	provider.SetPropagationWait(10 * time.Millisecond)
+
+	domain := "example.com"
+	token := "test-token"
+	keyAuth1 := "auth1"
+	keyAuth2 := "auth2"
+
+	// Create record with two values
+	if err := provider.Present(domain, token, keyAuth1); err != nil {
+		t.Fatalf("Present() first call error = %v", err)
+	}
+	if err := provider.Present(domain, token, keyAuth2); err != nil {
+		t.Fatalf("Present() second call error = %v", err)
+	}
+
+	// Cleanup should remove the entire record
+	if err := provider.CleanUp(domain, token, keyAuth1); err != nil {
+		t.Fatalf("CleanUp() error = %v", err)
+	}
+
+	// Verify record was deleted
+	ctx := context.Background()
+	records, err := store.Get(ctx, "_acme-challenge.example.com.", types.RecordTypeTXT)
+	if err != types.ErrRecordNotFound {
+		t.Errorf("expected ErrRecordNotFound after cleanup, got %v with %d records", err, len(records))
 	}
 }

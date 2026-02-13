@@ -159,7 +159,7 @@ metadata:
     app: jw238dns
 type: Opaque
 stringData:
-  http-token: "change-me-to-a-secure-random-token"
+  http-token: "${HTTP_AUTH_TOKEN}"
   acme-email: "shadowsocks1984@gmail.com"
   acme-eab-kid: "${ZEROSSL_EAB_KID}"
   acme-eab-hmac: "${ZEROSSL_EAB_HMAC_KEY}"
