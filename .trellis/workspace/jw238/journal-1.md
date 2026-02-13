@@ -1091,3 +1091,106 @@ _acme-challenge.mesh-worker.cloud TXT "value2"
 ### Next Steps
 
 - None - task complete
+
+## Session 13: Refactor ACME configuration and fix Secret naming
+
+**Date**: 2026-02-13
+**Task**: Refactor ACME configuration and fix Secret naming
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 问题分析
+
+1. **配置常量分散**：propagationWait、checkInterval、renewBefore 等默认值分散在多个文件中
+2. **Secret 命名不一致**：代码生成 `tls-domain` 但实际需要 `tls--domain`（双横杠）
+3. **命名逻辑重复**：Secret 名称生成逻辑散落在多处
+
+## 解决方案
+
+### 1. 统一 ACME 配置常量
+- **文件**: `acme/config.go`
+- 新增常量定义：
+  ```go
+  const (
+      DefaultCheckInterval   = 24 * time.Hour
+      DefaultRenewBefore     = 30 * 24 * time.Hour
+      DefaultPropagationWait = 2 * time.Second
+  )
+  ```
+- 更新 `DefaultConfig()` 使用这些常量
+- 从 `acme/dns01.go` 移除重复的常量定义
+
+### 2. 修改 main.go 引用常量
+- **文件**: `cmd/jw238dns/main.go`
+- 将硬编码的默认值改为引用 `acme` 包的常量：
+  ```go
+  checkInterval := acme.DefaultCheckInterval
+  renewBefore := acme.DefaultRenewBefore
+  propagationWait := acme.DefaultPropagationWait
+  ```
+
+### 3. 封装 Secret 命名逻辑
+- **文件**: `acme/storage.go`
+- 新增 `domainToK8sSecret()` 函数：
+  ```go
+  func domainToK8sSecret(domain string) string {
+      return fmt.Sprintf("tls--%s", sanitizeDomain(domain))
+  }
+  ```
+- 替换所有 `fmt.Sprintf("tls-%s", ...)` 为 `domainToK8sSecret(domain)`
+- 修复 Secret 命名从单横杠改为双横杠
+
+### 4. 更新测试代码
+- **文件**: `acme/storage_test.go`
+- 使用 `domainToK8sSecret()` 函数替代手动拼接
+
+## 技术细节
+
+**Secret 命名规则**:
+```
+*.mesh-worker.cloud    → tls--mesh-worker-cloud
+mesh-worker.cloud      → tls--mesh-worker-cloud
+api.mesh-worker.cloud  → tls--mesh-worker-cloud
+```
+
+**常量集中管理**:
+- 所有 ACME 相关的时间配置集中在 `acme/config.go`
+- 单一数据源，避免不一致
+- 修改时只需改一个地方
+
+## 影响范围
+
+- ACME 配置初始化
+- Kubernetes Secret 命名
+- 证书存储和加载逻辑
+- 所有使用默认配置的地方
+
+## 优点
+
+1. **代码更清晰**：常量定义集中，语义明确
+2. **易于维护**：修改配置只需改一处
+3. **命名一致**：统一的 Secret 命名规则
+4. **避免错误**：减少硬编码，降低出错概率
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7f310db` | (see git log) |
+| `44f0a2a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-acme/lego/v4/certificate"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -58,6 +59,10 @@ func (s *KubernetesSecretStorage) Store(ctx context.Context, domain string, cert
 	// Try to create, if exists then update
 	_, err := s.client.CoreV1().Secrets(s.namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
+		// Check if error is "already exists"
+		if !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create secret: %w", err)
+		}
 		// If already exists, update it
 		_, err = s.client.CoreV1().Secrets(s.namespace).Update(ctx, secret, metav1.UpdateOptions{})
 		if err != nil {

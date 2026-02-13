@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 13
 - **Last Active**: 2026-02-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1093 | Active |
+| `journal-1.md` | ~1196 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 13 | 2026-02-13 | Refactor ACME configuration and fix Secret naming | `7f310db`, `44f0a2a` |
 | 12 | 2026-02-13 | Fix ACME DNS-01 validation and TXT record handling | `25f0697`, `00446a6` |
 | 11 | 2026-02-13 | Fix ACME DNS validation and unify certificate naming | `d9964b8` |
 | 10 | 2026-02-13 | Fix ACME multi-domain DNS-01 validation and improve logging | `1e7cf93`, `02c71d9` |
