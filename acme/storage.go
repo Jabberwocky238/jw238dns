@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-acme/lego/v4/certificate"
 	corev1 "k8s.io/api/core/v1"
@@ -179,21 +180,30 @@ func (s *FileStorage) Delete(ctx context.Context, domain string) error {
 }
 
 // sanitizeDomain converts a domain name to a safe file/secret name.
+// Extracts the root domain (apex domain) and converts dots to hyphens.
+// Examples:
+//   *.mesh-worker.cloud    → mesh-worker-cloud
+//   mesh-worker.cloud      → mesh-worker-cloud
+//   api.mesh-worker.cloud  → mesh-worker-cloud
+//   v1.api.example.com     → example-com
 func sanitizeDomain(domain string) string {
-	// Replace dots and wildcards with hyphens
-	safe := domain
-	safe = filepath.Base(safe) // Remove any path separators
+	// Remove wildcard prefix if present
+	domain = strings.TrimPrefix(domain, "*.")
 
-	result := make([]rune, 0, len(safe))
-	for _, r := range safe {
-		switch r {
-		case '.':
-			result = append(result, '-')
-		case '*':
-			result = append(result, []rune("wildcard")...)
-		default:
-			result = append(result, r)
-		}
+	// Remove any path separators
+	safe := filepath.Base(domain)
+
+	// Extract root domain (last two parts: domain.tld)
+	parts := strings.Split(safe, ".")
+	var rootDomain string
+	if len(parts) >= 2 {
+		// Take last two parts (e.g., "mesh-worker" and "cloud")
+		rootDomain = strings.Join(parts[len(parts)-2:], ".")
+	} else {
+		// Single part domain (shouldn't happen in practice)
+		rootDomain = safe
 	}
-	return string(result)
+
+	// Replace dots with hyphens
+	return strings.ReplaceAll(rootDomain, ".", "-")
 }

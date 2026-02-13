@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 )
@@ -57,8 +58,12 @@ func NewClient(config *Config, store storage.CoreStorage) (*Client, error) {
 	dnsProvider := NewDNS01Provider(store)
 	dnsProvider.SetPropagationWait(config.PropagationWait)
 
-	// Set DNS-01 challenge provider
-	if err := legoClient.Challenge.SetDNS01Provider(dnsProvider); err != nil {
+	// Set DNS-01 challenge provider with custom DNS servers
+	// Use public DNS servers (8.8.8.8, 1.1.1.1) instead of Kubernetes internal DNS
+	// to ensure ACME validation can query our DNS records
+	if err := legoClient.Challenge.SetDNS01Provider(dnsProvider,
+		dns01.AddRecursiveNameservers([]string{"1.1.1.1:53", "8.8.8.8:53"}),
+	); err != nil {
 		return nil, fmt.Errorf("failed to set DNS-01 provider: %w", err)
 	}
 

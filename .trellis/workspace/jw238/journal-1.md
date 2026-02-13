@@ -571,3 +571,151 @@ worker namespace:
 ### Next Steps
 
 - None - task complete
+
+## Session 10: Fix ACME multi-domain DNS-01 validation and improve logging
+
+**Date**: 2026-02-13
+**Task**: Fix ACME multi-domain DNS-01 validation and improve logging
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+修复了 ACME 多域名证书申请时 DNS-01 验证失败的问题，并改进了日志输出。
+
+## Problems Fixed
+
+### 1. 多域名 DNS-01 验证失败
+
+**问题**：申请包含通配符和根域名的证书（如 `*.mesh-worker.cloud` 和 `mesh-worker.cloud`）时，第二个域名的验证记录会覆盖第一个域名的记录，导致验证失败。
+
+**原因**：
+- 两个域名共享同一个 TXT 记录 `_acme-challenge.mesh-worker.cloud.`
+- 但需要不同的验证值
+- 原代码使用 Update 覆盖而不是追加
+
+**解决方案**：
+- 修改 `Present()` 方法，检查已存在的记录并追加新值
+- 添加 `normalizeFQDN()` 函数，将 `_acme-challenge.*.example.com.` 规范化为 `_acme-challenge.example.com.`
+- 确保多个验证值共存于同一个 TXT 记录
+
+### 2. DNS 传播日志噪音
+
+**问题**：lego 库每秒打印一次 "Waiting for DNS record propagation" 日志，60 秒产生 60 条重复日志。
+
+**解决方案**：
+- 实现自定义的 `waitForPropagation()` 方法
+- 使用指数退避日志：1s → 2s → 4s → 8s（最大）
+- 减少日志数量从 60 条到约 8 条
+
+### 3. Health check 日志噪音
+
+**问题**：Kubernetes 健康检查每 10 秒调用一次 `/health`，产生大量无用日志。
+
+**解决方案**：
+- 修改 `LoggingMiddleware`，跳过 `/health` 端点的日志
+
+### 4. 配置验证缺失
+
+**问题**：启动时不检查必需的环境变量，运行时才报错。
+
+**解决方案**：
+- 添加 `validateConfig()` 函数
+- 启动时验证 HTTP 认证 token
+- 启动时验证 ZeroSSL EAB 凭证
+- 配置错误时立即退出并给出明确错误信息
+
+### 5. 配置字段缺失
+
+**问题**：ACME 配置结构体缺少时间相关字段，导致 panic。
+
+**解决方案**：
+- 添加 `key_type`、`check_interval`、`renew_before`、`propagation_wait` 字段
+- 实现时间字符串解析（`"24h"` → `24 * time.Hour`）
+- 设置合理的默认值
+
+## Code Changes
+
+### 1. `acme/dns01.go`
+- 添加 `normalizeFQDN()` 函数处理通配符 FQDN
+- 修改 `Present()` 方法支持值追加
+- 添加 `waitForPropagation()` 方法实现指数退避日志
+- 修改 `CleanUp()` 使用规范化的 FQDN
+
+### 2. `acme/dns01_test.go`
+- 添加 `TestDNS01Provider_MultiDomain_SameFQDN` 测试通配符+根域名场景
+- 添加 `TestDNS01Provider_MultiDomain_Sequential` 测试连续追加值
+- 添加 `TestDNS01Provider_CleanUp_MultiValue` 测试清理多值记录
+- 所有测试通过 ✅ (10/10)
+
+### 3. `cmd/jw238dns/main.go`
+- 添加 `validateConfig()` 函数验证配置
+- 扩展 `ACMEConfig` 结构体添加缺失字段
+- 改进 `ToACMEConfig()` 方法解析时间配置
+
+### 4. `http/middleware.go`
+- 修改 `LoggingMiddleware` 跳过 `/health` 端点日志
+
+### 5. `assets/k8s-deployment.yaml`
+- 添加环境变量从 Secret 读取 EAB 凭证和 HTTP token
+- 完善 ACME 配置注释和说明
+
+## Test Results
+
+```
+=== RUN   TestDNS01Provider_Present
+--- PASS: TestDNS01Provider_Present (1.08s)
+=== RUN   TestDNS01Provider_MultiDomain_SameFQDN
+--- PASS: TestDNS01Provider_MultiDomain_SameFQDN (2.17s)
+=== RUN   TestDNS01Provider_MultiDomain_Sequential
+--- PASS: TestDNS01Provider_MultiDomain_Sequential (3.21s)
+=== RUN   TestDNS01Provider_CleanUp_MultiValue
+--- PASS: TestDNS01Provider_CleanUp_MultiValue (2.11s)
+PASS
+ok  	jabberwocky238/jw238dns/acme	21.199s
+```
+
+## Impact
+
+**Before:**
+- 多域名证书申请失败
+- 60 秒产生 60+ 条重复日志
+- 健康检查产生大量无用日志
+- 配置错误运行时才发现
+
+**After:**
+- 多域名证书申请成功 ✅
+- 60 秒只产生 ~8 条日志（减少 87%）
+- 健康检查不再产生日志
+- 配置错误启动时立即发现
+
+## Updated Files
+
+- `acme/dns01.go` - DNS-01 验证逻辑修复
+- `acme/dns01_test.go` - 新增多域名测试用例
+- `cmd/jw238dns/main.go` - 配置验证和解析
+- `http/middleware.go` - 日志过滤
+- `assets/k8s-deployment.yaml` - 环境变量配置
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1e7cf93` | (see git log) |
+| `02c71d9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

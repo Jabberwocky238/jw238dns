@@ -2,6 +2,7 @@ package acme
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -295,17 +296,37 @@ func TestSanitizeDomain(t *testing.T) {
 		{
 			name:   "subdomain",
 			domain: "www.example.com",
-			want:   "www-example-com",
+			want:   "example-com",
 		},
 		{
-			name:   "wildcard",
+			name:   "wildcard domain",
 			domain: "*.example.com",
-			want:   "wildcard-example-com",
+			want:   "example-com",
 		},
 		{
-			name:   "multiple wildcards",
-			domain: "*.*.example.com",
-			want:   "wildcard-wildcard-example-com",
+			name:   "wildcard mesh-worker.cloud",
+			domain: "*.mesh-worker.cloud",
+			want:   "mesh-worker-cloud",
+		},
+		{
+			name:   "apex mesh-worker.cloud",
+			domain: "mesh-worker.cloud",
+			want:   "mesh-worker-cloud",
+		},
+		{
+			name:   "api subdomain",
+			domain: "api.mesh-worker.cloud",
+			want:   "mesh-worker-cloud",
+		},
+		{
+			name:   "multi-level subdomain",
+			domain: "v1.api.mesh-worker.cloud",
+			want:   "mesh-worker-cloud",
+		},
+		{
+			name:   "deep subdomain",
+			domain: "service.v1.api.example.com",
+			want:   "example-com",
 		},
 	}
 
@@ -315,6 +336,10 @@ func TestSanitizeDomain(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("sanitizeDomain(%q) = %q, want %q", tt.domain, got, tt.want)
 			}
+
+			// Verify secret name format
+			secretName := fmt.Sprintf("tls--%s", got)
+			t.Logf("Domain: %s → Secret: %s", tt.domain, secretName)
 		})
 	}
 }
