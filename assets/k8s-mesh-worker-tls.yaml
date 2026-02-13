@@ -40,7 +40,7 @@ spec:
 
   tls:
     # Certificate for apex domain (mesh-worker.cloud)
-    secretName: tls-normal--mesh-worker_cloud
+    secretName: tls-normal--mesh-worker-cloud
 
 ---
 # Traefik IngressRoute for subdomains (*.mesh-worker.cloud)
@@ -63,7 +63,7 @@ spec:
 
   tls:
     # Certificate for wildcard subdomains (*.mesh-worker.cloud)
-    secretName: tls-wildcard--__mesh-worker_cloud
+    secretName: tls-wildcard-----mesh-worker--cloud
 
 ---
 # Optional: HTTP to HTTPS redirect

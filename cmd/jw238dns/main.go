@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"jabberwocky238/jw238dns/acme"
 	"jabberwocky238/jw238dns/dns"
 	jwhttp "jabberwocky238/jw238dns/http"
 	"jabberwocky238/jw238dns/storage"
@@ -202,53 +201,6 @@ func main() {
 		defer httpSrv.Shutdown()
 	}
 
-	// Initialize ACME Manager if enabled
-	if config.ACME.Enabled {
-		slog.Info("Initializing ACME manager", "mode", config.ACME.Mode, "email", config.ACME.Email)
-
-		// Create certificate storage
-		var certStorage acme.CertificateStorage
-		if config.ACME.Storage.Type == "kubernetes-secret" {
-			k8sClient, err := storage.NewK8sClient()
-			if err != nil {
-				slog.Error("Failed to create Kubernetes client for ACME", "error", err)
-			} else {
-				certStorage = acme.NewKubernetesSecretStorage(k8sClient, config.ACME.Storage.Namespace)
-				slog.Info("Using Kubernetes Secret storage for certificates", "namespace", config.ACME.Storage.Namespace)
-			}
-		} else if config.ACME.Storage.Type == "file" {
-			certStorage = acme.NewFileStorage(config.ACME.Storage.Path)
-			slog.Info("Using file storage for certificates", "path", config.ACME.Storage.Path)
-		}
-
-		if certStorage != nil {
-			// Create ACME manager
-			acmeConfig := config.ACME.ToACMEConfig()
-			manager, err := acme.NewManager(acmeConfig, store, certStorage)
-			if err != nil {
-				slog.Error("Failed to create ACME manager", "error", err)
-			} else {
-				// Obtain certificates for configured domains
-				if len(config.Domains) > 0 {
-					for _, domainConfig := range config.Domains {
-						if domainConfig.AutoObtain {
-							slog.Info("Obtaining certificate", "domains", domainConfig.Domains)
-							if err := manager.ObtainCertificate(ctx, domainConfig.Domains); err != nil {
-								slog.Error("Failed to obtain certificate", "domains", domainConfig.Domains, "error", err)
-							}
-						}
-					}
-				}
-
-				// Start auto-renewal if enabled
-				if config.ACME.AutoRenew {
-					manager.StartAutoRenewal(ctx)
-					slog.Info("ACME auto-renewal started")
-				}
-			}
-		}
-	}
-
 	// Wait for interrupt signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -319,63 +271,15 @@ func validateConfig(config *Config) error {
 		slog.Info("HTTP authentication validated", "token_env", config.HTTP.Auth.TokenEnv)
 	}
 
-	// Validate ACME configuration
-	if config.ACME.Enabled {
-		// Validate email
-		if config.ACME.Email == "" {
-			return fmt.Errorf("ACME is enabled but email is not configured")
-		}
-
-		// Validate EAB credentials for ZeroSSL
-		if config.ACME.Mode == "zerossl" {
-			if config.ACME.EAB.KidEnv == "" || config.ACME.EAB.HmacEnv == "" {
-				return fmt.Errorf("ACME mode is 'zerossl' but EAB environment variable names are not configured")
-			}
-
-			kid := os.Getenv(config.ACME.EAB.KidEnv)
-			hmac := os.Getenv(config.ACME.EAB.HmacEnv)
-
-			if kid == "" {
-				return fmt.Errorf("ACME mode is 'zerossl' but environment variable %s (EAB KID) is not set or empty", config.ACME.EAB.KidEnv)
-			}
-			if hmac == "" {
-				return fmt.Errorf("ACME mode is 'zerossl' but environment variable %s (EAB HMAC) is not set or empty", config.ACME.EAB.HmacEnv)
-			}
-
-			slog.Info("ZeroSSL EAB credentials validated",
-				"kid_env", config.ACME.EAB.KidEnv,
-				"hmac_env", config.ACME.EAB.HmacEnv)
-		}
-
-		// Validate storage configuration
-		if config.ACME.Storage.Type == "" {
-			return fmt.Errorf("ACME is enabled but storage type is not configured")
-		}
-		if config.ACME.Storage.Type == "kubernetes-secret" && config.ACME.Storage.Namespace == "" {
-			return fmt.Errorf("ACME storage type is 'kubernetes-secret' but namespace is not configured")
-		}
-		if config.ACME.Storage.Type == "file" && config.ACME.Storage.Path == "" {
-			return fmt.Errorf("ACME storage type is 'file' but path is not configured")
-		}
-	}
-
 	return nil
 }
 
 // Config represents the application configuration
 type Config struct {
-	DNS     DNSConfig       `yaml:"dns"`
-	GeoIP   GeoIPConfig     `yaml:"geoip"`
-	Storage StorageConfig   `yaml:"storage"`
-	HTTP    HTTPConfig      `yaml:"http"`
-	ACME    ACMEConfig      `yaml:"acme"`
-	Domains []DomainConfig  `yaml:"domains"`
-}
-
-// DomainConfig represents a domain certificate configuration
-type DomainConfig struct {
-	Domains     []string `yaml:"domains"`
-	AutoObtain  bool     `yaml:"auto_obtain"`
+	DNS     DNSConfig     `yaml:"dns"`
+	GeoIP   GeoIPConfig   `yaml:"geoip"`
+	Storage StorageConfig `yaml:"storage"`
+	HTTP    HTTPConfig    `yaml:"http"`
 }
 
 type DNSConfig struct {
@@ -422,93 +326,4 @@ type HTTPConfig struct {
 type AuthConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	TokenEnv string `yaml:"token_env"`
-}
-
-type EABEnvConfig struct {
-	KidEnv  string `yaml:"kid_env"`
-	HmacEnv string `yaml:"hmac_env"`
-}
-
-type ACMEConfig struct {
-	Enabled         bool              `yaml:"enabled"`
-	Mode            string            `yaml:"mode"`
-	Server          string            `yaml:"server"`
-	Email           string            `yaml:"email"`
-	KeyType         string            `yaml:"key_type"`
-	EAB             EABEnvConfig      `yaml:"eab"`
-	AutoRenew       bool              `yaml:"auto_renew"`
-	CheckInterval   string            `yaml:"check_interval"`
-	RenewBefore     string            `yaml:"renew_before"`
-	PropagationWait string            `yaml:"propagation_wait"`
-	Storage         ACMEStorageConfig `yaml:"storage"`
-}
-
-type ACMEStorageConfig struct {
-	Type      string `yaml:"type"`
-	Namespace string `yaml:"namespace"`
-	Path      string `yaml:"path"`
-}
-
-// ToACMEConfig converts the YAML-based ACMEConfig to an acme.Config,
-// resolving EAB credentials from environment variables and server URL from mode.
-func (c *ACMEConfig) ToACMEConfig() *acme.Config {
-	serverURL := c.Server
-	if serverURL == "" {
-		switch c.Mode {
-		case "zerossl":
-			serverURL = acme.ZeroSSLProduction()
-		case "letsencrypt":
-			serverURL = acme.LetsEncryptProduction()
-		default:
-			// Default to Let's Encrypt production if no mode or server specified
-			serverURL = acme.LetsEncryptProduction()
-		}
-	}
-
-	// Parse duration strings with defaults
-	checkInterval := acme.DefaultCheckInterval
-	if c.CheckInterval != "" {
-		if d, err := time.ParseDuration(c.CheckInterval); err == nil {
-			checkInterval = d
-		}
-	}
-
-	renewBefore := acme.DefaultRenewBefore
-	if c.RenewBefore != "" {
-		if d, err := time.ParseDuration(c.RenewBefore); err == nil {
-			renewBefore = d
-		}
-	}
-
-	propagationWait := acme.DefaultPropagationWait
-	if c.PropagationWait != "" {
-		if d, err := time.ParseDuration(c.PropagationWait); err == nil {
-			propagationWait = d
-		}
-	}
-
-	// Set default key type if not specified
-	keyType := c.KeyType
-	if keyType == "" {
-		keyType = "RSA2048"
-	}
-
-	return &acme.Config{
-		ServerURL:       serverURL,
-		Email:           c.Email,
-		KeyType:         keyType,
-		AutoRenew:       c.AutoRenew,
-		CheckInterval:   checkInterval,
-		RenewBefore:     renewBefore,
-		PropagationWait: propagationWait,
-		EAB: acme.EABConfig{
-			KID:     os.Getenv(c.EAB.KidEnv),
-			HMACKey: os.Getenv(c.EAB.HmacEnv),
-		},
-		Storage: acme.StorageConfig{
-			Type:      c.Storage.Type,
-			Namespace: c.Storage.Namespace,
-			Path:      c.Storage.Path,
-		},
-	}
 }
